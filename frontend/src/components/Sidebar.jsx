@@ -1,47 +1,116 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
-const navigationItems = [
-  { label: "Dashboard", to: "/" },
-  { label: "Health Monitoring", to: "/health-monitoring" },
-  { label: "Risk Alerts", to: "/risk-alerts" },
-  { label: "Health History", to: "/health-history" },
-  { label: "Settings", to: "/settings" },
+const navigationGroups = [
+  {
+    label: "MISSION OVERVIEW",
+    items: [
+      { label: "Dashboard", to: "/", icon: "M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z" },
+    ],
+  },
+  {
+    label: "HEALTH MONITORING",
+    items: [
+      { label: "Health Monitoring", to: "/health-monitoring", icon: "M3 12h4l3-8 4 16 3-8h4" },
+      { label: "Risk Alerts", to: "/risk-alerts", icon: "M12 3 2.8 20h18.4L12 3zm0 6v5m0 3h.01" },
+      { label: "Health History", to: "/health-history", icon: "M3 12a9 9 0 1 0 2.64-6.36L3 8m0-5v5h5m4-1v5l3 2" },
+    ],
+  },
+  {
+    label: "CREW AND CONFIGURATION",
+    items: [
+      { label: "Settings", to: "/settings", icon: "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0-6v2m0 15v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64" },
+    ],
+  },
 ];
 
-export default function Sidebar() {
-  return (
-    <aside className="app-sidebar">
-      <NavLink className="app-brand" to="/dashboard" aria-label="Mission Health dashboard">
-        <span className="app-brand-mark" aria-hidden="true">A</span>
-        <span>
-          <strong>ASTRA</strong>
-          <small>CREW HEALTH SYSTEM</small>
-        </span>
-      </NavLink>
+export default function Sidebar({ drawerRef, isOpen, onNavigate, onClose }) {
+  const { pathname } = useLocation();
 
-      <div className="app-nav-label">MISSION CONSOLE</div>
-      <nav className="app-navigation" aria-label="Main navigation">
-        {navigationItems.map(({ label, to }) => (
+  return (
+    <aside
+      ref={drawerRef}
+      className={`app-sidebar${isOpen ? " is-open" : ""}`}
+      id="app-navigation-drawer"
+      role="dialog"
+      aria-modal={isOpen}
+      aria-label="ASTRA mission navigation"
+      aria-hidden={!isOpen}
+    >
+      <div className="app-drawer-profile">
+        <div className="app-sidebar-header">
           <NavLink
-            key={to}
-            to={to}
-              className={({ isActive }) =>
-                `app-nav-link${isActive ? " is-active" : ""}`
-            }
+            className="app-brand"
+            to="/dashboard"
+            aria-label="ASTRA Crew Health System dashboard"
+            onClick={onNavigate}
+            tabIndex={isOpen ? 0 : -1}
           >
-            <span className="app-nav-indicator" aria-hidden="true" />
-            {label}
+            <span className="app-brand-mark" aria-hidden="true">A</span>
+            <span>
+              <strong>ASTRA</strong>
+              <small>CREW HEALTH SYSTEM</small>
+            </span>
           </NavLink>
+          <button
+            type="button"
+            className="app-sidebar-close"
+            aria-label="Close navigation drawer"
+            onClick={onClose}
+            tabIndex={isOpen ? 0 : -1}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="app-profile-row">
+          <span className="app-profile-avatar" aria-hidden="true">CM</span>
+          <span className="app-profile-copy">
+            <strong>Crew Member</strong>
+            <small>Crew profile not configured</small>
+          </span>
+        </div>
+        <div className="app-drawer-title">
+          <span>ASTRA NAVIGATION</span>
+          <h2>Mission Control</h2>
+        </div>
+      </div>
+
+      <nav className="app-navigation-scroll" aria-label="Main navigation">
+        {navigationGroups.map(({ label, items }) => (
+          <section className="app-nav-group" key={label}>
+            <h3 className="app-nav-label">{label}</h3>
+            <div className="app-navigation">
+              {items.map(({ label: itemLabel, to, icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === "/"}
+                  aria-label={itemLabel}
+                  title={itemLabel}
+                  aria-current={to === "/" && pathname === "/dashboard" ? "page" : undefined}
+                  onClick={onNavigate}
+                  tabIndex={isOpen ? 0 : -1}
+                  className={({ isActive }) =>
+                    `app-nav-link${isActive || (to === "/" && pathname === "/dashboard") ? " is-active" : ""}`
+                  }
+                >
+                  <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d={icon} />
+                  </svg>
+                  <span className="app-nav-text">{itemLabel}</span>
+                  <span className="app-nav-arrow" aria-hidden="true">›</span>
+                </NavLink>
+              ))}
+            </div>
+          </section>
         ))}
       </nav>
 
-      <div className="app-sidebar-footer">
-        <span className="app-status-dot" />
-        <span>
-          <strong>DEMO ENVIRONMENT</strong>
-          <small>Sample data only</small>
-        </span>
-      </div>
+      <footer className="app-drawer-footer">
+        ASTRA <span aria-hidden="true">·</span> CREW HEALTH SYSTEM
+      </footer>
     </aside>
   );
 }

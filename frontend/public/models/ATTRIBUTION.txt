@@ -1,0 +1,14 @@
+BodyParts3D skin surface model
+
+Source: BodyParts3D, The Database Center for Life Science (DBCLS)
+Attribution: "BodyParts3D, © The Database Center for Life Science licensed under CC Attribution 4.0 International".
+License: Creative Commons Attribution 4.0 International
+License information: https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html
+Model record: File ID FJ2810, Representation ID BP9115, English name "Skin".
+
+The local OBJ header contains an older license notice. The current official
+BodyParts3D license page (updated 2025-02-27) specifies CC BY 4.0.
+The OBJ contains a single skin surface mesh without a texture map or separate
+organ meshes. Skin color variation and the fitted navy shorts are generated
+procedurally; a localized surface adjustment provides modest coverage.
+Interactive region selection uses approximate surface zones.

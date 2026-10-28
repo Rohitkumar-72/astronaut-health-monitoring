@@ -1,7 +1,7 @@
 :root {
   font-family: Inter, "Segoe UI", Roboto, sans-serif;
-  color: #e8eef8;
-  background: #09111f;
+  color: #f1f5ff;
+  background: #080f1e;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -9,16 +9,18 @@
   font-optical-sizing: auto;
   font-weight: 400;
 
-  --app-bg: #09111f;
-  --app-surface: #101b2b;
-  --app-surface-raised: #142235;
-  --app-border: #26364b;
-  --app-text: #e8eef8;
-  --app-muted: #8fa1b9;
-  --app-accent: #4de0bd;
-  --app-blue: #78b8ff;
-  --app-warning: #f6c76b;
-  --app-danger: #ff7481;
+  --app-bg: #080f1e;
+  --app-surface: #111c32;
+  --app-surface-raised: #17243b;
+  --app-border: rgb(163 179 204 / 16%);
+  --app-text: #f1f5ff;
+  --app-muted: #a3b3cc;
+  --app-accent: #42e8d5;
+  --app-accent-secondary: #9b8cff;
+  --app-blue: #83b9ff;
+  --app-success: #66e0a3;
+  --app-warning: #ffc36b;
+  --app-danger: #ff788b;
 }
 
 * {
@@ -37,7 +39,8 @@ body {
   margin: 0;
   color: var(--app-text);
   background:
-    radial-gradient(ellipse at 75% 0%, rgb(32 68 93 / 16%), transparent 38rem),
+    radial-gradient(ellipse at 82% 0%, rgb(66 232 213 / 6%), transparent 34rem),
+    radial-gradient(ellipse at 15% 28%, rgb(155 140 255 / 5%), transparent 42rem),
     var(--app-bg);
 }
 
@@ -68,6 +71,6 @@ a {
 }
 
 ::selection {
-  color: #061612;
+  color: #06131b;
   background: var(--app-accent);
 }
