@@ -5,6 +5,7 @@ import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 
 import Dashboard from "./pages/Dashboard";
+import CrewOverview from "./components/CrewOverview";
 import HealthMonitoring from "./pages/HealthMonitoring";
 import RiskAlerts from "./pages/RiskAlerts";
 import HealthHistory from "./pages/HealthHistory";
@@ -99,6 +100,11 @@ function AppLayout() {
           <Route
             path="/dashboard"
             element={<Dashboard />}
+          />
+
+          <Route
+            path="/crew-overview"
+            element={<CrewOverview />}
           />
 
           <Route

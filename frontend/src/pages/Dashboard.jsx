@@ -1,8 +1,10 @@
+import { useCallback } from "react";
 import { Link } from "react-router-dom";
 import AnatomyPanel from "../components/AnatomyPanel";
 import HealthTrendCard from "../components/HealthTrendCard";
 import RiskBadge from "../components/RiskBadge";
-import demoHealthData from "../data/demoHealthData";
+import { getDashboardOverview } from "../services/api";
+import useApiResource from "../hooks/useApiResource";
 
 const metricDefinitions = [
   { parameter: "Heart Rate", label: "Heart rate" },
@@ -98,7 +100,9 @@ function AlertItem({ alert }) {
 }
 
 export default function Dashboard() {
-  const alerts = Array.isArray(demoHealthData) ? demoHealthData : [];
+  const loadOverview = useCallback(({ signal }) => getDashboardOverview({ signal }), []);
+  const { data: overview, error, loading, reload } = useApiResource(loadOverview);
+  const alerts = overview?.alerts || [];
   const sortedAlerts = [...alerts].sort(newestFirst);
   const latestByMetric = getLatestByMetric(alerts);
   const latestHeartRate = latestByMetric.get("Heart Rate");
@@ -117,6 +121,34 @@ export default function Dashboard() {
   );
   const validMetrics = metricDefinitions.filter(({ parameter }) => latestByMetric.has(parameter));
 
+  if (loading || error || !overview) {
+    return (
+      <div className="app-page dashboard-workspace">
+        <header className="dashboard-page-heading">
+          <div>
+            <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
+            <h1 id="dashboard-title">Astronaut Health Intelligence</h1>
+            <p>Health observations and risk indicators from the available demonstration dataset.</p>
+          </div>
+          <div className="dashboard-data-source">
+            <span className="dashboard-source-dot" />
+            <span>BACKEND DEMONSTRATION DATA</span>
+          </div>
+        </header>
+        <section className="app-panel" role={error ? "alert" : "status"}>
+          {loading && <p>Loading dashboard data from the backend…</p>}
+          {error && (
+            <>
+              <h2>Unable to load dashboard data</h2>
+              <p>{error.message}</p>
+              <button type="button" className="dashboard-section-link" onClick={reload}>Retry</button>
+            </>
+          )}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="app-page dashboard-workspace">
       <header className="dashboard-page-heading">
@@ -127,7 +159,7 @@ export default function Dashboard() {
         </div>
         <div className="dashboard-data-source">
           <span className="dashboard-source-dot" />
-          <span>DEMONSTRATION DATA</span>
+          <span>BACKEND · DEMONSTRATION DATA</span>
         </div>
       </header>
 

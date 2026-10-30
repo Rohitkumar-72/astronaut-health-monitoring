@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import demoHealthData from "../data/demoHealthData";
-
-const STORAGE_KEY = "astronaut-health-alerts-v1";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createAlert, getAlerts, resetDemoAlerts, updateAlert as saveAlertStatus } from "../services/api";
 
 const severityLevels = ["All", "Critical", "High", "Medium", "Low"];
 
@@ -18,24 +16,6 @@ const severityClass = (severity = "") =>
 
 const statusClass = (status = "") =>
   status.toLowerCase().replace(/\s+/g, "-");
-
-const readInitialAlerts = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-
-    if (saved) {
-      const parsed = JSON.parse(saved);
-
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (error) {
-    console.error("Unable to load saved alerts:", error);
-  }
-
-  return demoHealthData.map((alert) => ({ ...alert }));
-};
 
 const formatDate = (timestamp) => {
   if (!timestamp) return "Unknown";
@@ -384,7 +364,10 @@ function AlertDetailsModal({ alert, onClose, onUpdate }) {
 }
 
 export default function AlertPanel() {
-  const [alerts, setAlerts] = useState(readInitialAlerts);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [apiError, setApiError] = useState("");
   const [severityFilter, setSeverityFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -393,13 +376,41 @@ export default function AlertPanel() {
     alerts.find((alert) => alert.id === selectedAlertId) || null;
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
+  const refreshAlerts = useCallback(async () => {
+    setLoading(true);
+    setApiError("");
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
+      setAlerts(await getAlerts());
+      setLoaded(true);
+      return true;
     } catch (error) {
-      console.error("Unable to save alerts:", error);
+      setApiError(error.message);
+      return false;
+    } finally {
+      setLoading(false);
     }
-  }, [alerts]);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getAlerts()
+      .then((result) => {
+        if (active) {
+          setAlerts(result);
+          setLoaded(true);
+        }
+      })
+      .catch((error) => {
+        if (active) setApiError(error.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -466,25 +477,18 @@ export default function AlertPanel() {
       });
   }, [alerts, severityFilter, statusFilter, search]);
 
-  const updateAlert = (id, status) => {
-    setAlerts((previous) =>
-      previous.map((alert) =>
-        alert.id === id
-          ? {
-              ...alert,
-              status,
-              updatedAt: new Date().toISOString(),
-            }
-          : alert
-      )
-    );
-
-    setNotice(`${id} updated to "${status}".`);
+  const updateAlert = async (id, status) => {
+    try {
+      const updated = await saveAlertStatus(id, status);
+      setAlerts((previous) => previous.map((alert) => alert.id === id ? updated : alert));
+      setApiError("");
+      setNotice(`${id} updated to "${status}".`);
+    } catch (error) {
+      setApiError(error.message);
+    }
   };
 
-  const addDemoAlert = () => {
-    const id = `ALT-${Date.now().toString().slice(-8)}`;
-
+  const addDemoAlert = async () => {
     const examples = [
       {
         parameter: "Heart Rate",
@@ -511,20 +515,20 @@ export default function AlertPanel() {
 
     const example = examples[Math.floor(Math.random() * examples.length)];
 
-    const newAlert = {
-      id,
+    try {
+      const newAlert = await createAlert({
       astronautId: "AST-001",
-      astronautName: "Alex Morgan",
       ...example,
-      status: "New",
       message: `A new simulated ${example.parameter.toLowerCase()} alert was generated.`,
       recommendation:
         "Verify the reading and follow the configured mission monitoring protocol.",
-      timestamp: new Date().toISOString(),
-    };
-
-    setAlerts((previous) => [newAlert, ...previous]);
-    setNotice("Demo alert created successfully.");
+      });
+      setAlerts((previous) => [newAlert, ...previous]);
+      setApiError("");
+      setNotice("Demo alert created successfully.");
+    } catch (error) {
+      setApiError(error.message);
+    }
   };
 
   const exportCSV = () => {
@@ -579,21 +583,24 @@ export default function AlertPanel() {
     setNotice("Alert report exported successfully.");
   };
 
-  const resetDemo = () => {
+  const resetDemo = async () => {
     const confirmed = window.confirm(
       "Reset all alerts to the original demo data? Current status changes will be lost."
     );
 
     if (!confirmed) return;
 
-    const initial = demoHealthData.map((alert) => ({ ...alert }));
-
-    setAlerts(initial);
-    setSelectedAlertId(null);
-    setSearch("");
-    setSeverityFilter("All");
-    setStatusFilter("All");
-    setNotice("Demo data restored.");
+    try {
+      await resetDemoAlerts();
+      if (!await refreshAlerts()) return;
+      setSelectedAlertId(null);
+      setSearch("");
+      setSeverityFilter("All");
+      setStatusFilter("All");
+      setNotice("Demo data restored.");
+    } catch (error) {
+      setApiError(error.message);
+    }
   };
 
   return (
@@ -602,7 +609,7 @@ export default function AlertPanel() {
         <div>
           <div className="ahm-eyebrow">
             <span className="ahm-live-dot" />
-            MISSION HEALTH SYSTEM
+            API-CONNECTED DEMONSTRATION DATA
           </div>
 
           <h1>Health Alerts</h1>
@@ -637,7 +644,19 @@ export default function AlertPanel() {
           <span>✓</span> {notice}
         </div>
       )}
+      {apiError && <p className="ahm-empty-state" role="alert">{apiError}</p>}
 
+      {loading && (
+        <section className="ahm-panel" role="status">
+          <p>Loading alerts from the backend…</p>
+        </section>
+      )}
+      {!loading && apiError && (
+        <button type="button" className="ahm-button ahm-button-secondary" onClick={refreshAlerts}>Retry API request</button>
+      )}
+
+      {!loading && loaded && (
+      <>
       <section className="ahm-stats-grid" aria-label="Alert statistics">
         <div className="ahm-stat-card">
           <span className="ahm-stat-icon">▤</span>
@@ -900,6 +919,8 @@ export default function AlertPanel() {
           <span>Demo monitoring mode</span>
         </div>
       </section>
+      </>
+      )}
 
       <AlertDetailsModal
         alert={selectedAlert}

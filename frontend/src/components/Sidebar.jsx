@@ -5,6 +5,7 @@ const navigationGroups = [
     label: "MISSION OVERVIEW",
     items: [
       { label: "Dashboard", to: "/", icon: "M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z" },
+      { label: "Crew Overview", to: "/crew-overview", icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m7-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.87m-3-11.88a4 4 0 0 1 0 7.75" },
     ],
   },
   {

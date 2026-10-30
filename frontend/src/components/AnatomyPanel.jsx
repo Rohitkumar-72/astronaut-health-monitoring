@@ -89,6 +89,7 @@ function getSkinVariation(x, y, z, normalZ) {
 }
 
 function createRegionMeshes(sourceGeometry, bounds) {
+  if (!sourceGeometry.getAttribute("normal")) sourceGeometry.computeVertexNormals();
   const isIndexed = Boolean(sourceGeometry.index);
   const geometry = isIndexed ? sourceGeometry.toNonIndexed() : sourceGeometry;
   const positions = geometry.getAttribute("position");
@@ -117,7 +118,7 @@ function createRegionMeshes(sourceGeometry, bounds) {
 
   const regionBuffers = BODY_REGIONS.map((_, region) => ({
     positions: new Float32Array(vertexCounts[region] * 3),
-    normals: null,
+    normals: normals ? new Float32Array(vertexCounts[region] * 3) : null,
     uvs: uvs ? new Float32Array(vertexCounts[region] * 2) : null,
     colors: new Float32Array(vertexCounts[region] * 3),
     offset: 0,
@@ -138,6 +139,12 @@ function createRegionMeshes(sourceGeometry, bounds) {
       buffer.positions[targetOffset] = (sourceX - center.x) * scale;
       buffer.positions[targetOffset + 1] = (adjustedY - center.y) * scale;
       buffer.positions[targetOffset + 2] = (positions.getZ(sourceIndex) - center.z) * scale;
+
+      if (normals) {
+        buffer.normals[targetOffset] = normals.getX(sourceIndex);
+        buffer.normals[targetOffset + 1] = normals.getY(sourceIndex);
+        buffer.normals[targetOffset + 2] = normals.getZ(sourceIndex);
+      }
 
       if (uvs) {
         const uvOffset = (targetOffset / 3) * 2;
@@ -239,7 +246,7 @@ export default function AnatomyPanel({ readings }) {
   useEffect(() => {
     for (const [region, materials] of regionMaterialsRef.current) {
       for (const material of materials) {
-        material.emissiveIntensity = region === selectedRegion ? 0.035 : 0;
+        material.emissiveIntensity = region === selectedRegion ? 0.14 : 0;
       }
     }
   }, [renderState, selectedRegion]);

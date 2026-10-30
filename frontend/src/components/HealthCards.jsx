@@ -2,8 +2,10 @@ import RiskBadge from "./RiskBadge";
 
 const metricDefinitions = [
   { parameter: "Heart Rate", label: "Heart rate" },
+  { parameter: "Blood Pressure", label: "Blood pressure" },
   { parameter: "Oxygen Saturation", label: "Oxygen saturation" },
   { parameter: "Body Temperature", label: "Body temperature" },
+  { parameter: "Respiratory Rate", label: "Respiratory rate" },
   { parameter: "Sleep Duration", label: "Sleep duration" },
   { parameter: "Physical Activity", label: "Physical activity" },
   { parameter: "Stress Indicator", label: "Stress indicator" },

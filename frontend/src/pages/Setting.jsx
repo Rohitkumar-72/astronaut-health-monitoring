@@ -11,13 +11,13 @@ export default function Setting() {
       <section className="app-settings-grid">
         <article className="app-panel app-settings-card">
           <span className="app-settings-icon" aria-hidden="true">◎</span>
-          <div><h2>Data source</h2><p>This dashboard currently displays the included demonstration alert data. No live sensor feed is configured.</p></div>
-          <span className="app-setting-value">Demo data</span>
+          <div><h2>Data source</h2><p>The frontend reads the shared demonstration dataset through the backend API. No live sensor feed is configured.</p></div>
+          <span className="app-setting-value">Backend API · demo</span>
         </article>
         <article className="app-panel app-settings-card">
           <span className="app-settings-icon" aria-hidden="true">◷</span>
-          <div><h2>Alert storage</h2><p>Risk alert status changes are saved in this browser when local storage is available.</p></div>
-          <span className="app-setting-value">Browser local storage</span>
+          <div><h2>Alert storage</h2><p>Alert status changes are held by the backend process and reset when it restarts.</p></div>
+          <span className="app-setting-value">Backend memory</span>
         </article>
         <article className="app-panel app-settings-card">
           <span className="app-settings-icon" aria-hidden="true">◇</span>

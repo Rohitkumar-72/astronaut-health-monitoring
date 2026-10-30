@@ -368,37 +368,38 @@ cd backend
 npm install
 ```
 
-### Step 5: Start the Backend
+### Step 5: Configure and Start the Backend
 
-For development:
+The Express API uses port `5000` by default. Optional backend settings are documented in `backend/.env.example`; copy it to `backend/.env` to override the port or frontend origins.
 
 ```bash
+cd backend
+cp .env.example .env
+npm install
 npm run dev
 ```
 
-Alternatively, use:
+Alternatively, start it without the development watcher:
 
 ```bash
 npm start
 ```
 
-The backend will start on the port configured in the server code or environment variables.
+The API health check is available at `http://localhost:5000/api/health-check`.
 
-Check `backend/server.js` to confirm the configured port and available API routes.
+### Step 6: Configure the Frontend API URL
 
-### Step 6: Connect Frontend and Backend
+Set the backend base URL in `frontend/.env`:
 
-Verify that the frontend API service points to the correct backend URL.
-
-Check:
-
-```text
-frontend/src/services/api.js
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
-If the backend uses environment variables, configure them according to the project's implementation.
+`frontend/.env.example` contains this local development value. Restart Vite after changing environment variables.
 
-Ensure that the backend CORS configuration allows requests from the frontend development URL.
+The implemented API includes dashboard overview/summary/trends, crew profiles and histories, health readings and metrics, alerts (including status updates), rule-based risks, and mission information. CORS allows the default Vite origins `http://localhost:5173` and `http://127.0.0.1:5173`; configure `FRONTEND_ORIGINS` in `backend/.env` if Vite selects a different origin.
+
+The backend and frontend read their crew, mission, and alert demonstration records from the shared `shared/` modules. The existing CSV files are empty and are not used as a source. Health values and mission information are simulated or historical demonstration data, not live sensor readings. Risk estimates are rule-based, not a trained AI model. Alert status changes are held in backend memory and reset when the backend process restarts.
 
 ### Running the Application
 

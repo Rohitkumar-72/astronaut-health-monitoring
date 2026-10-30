@@ -1,17 +1,27 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import HealthCards from "../components/HealthCards";
 import HealthChart from "../components/HealthChart";
 import RiskBadge from "../components/RiskBadge";
-import demoHealthData from "../data/demoHealthData";
+import { getHealthHistory, getHealthReadings } from "../services/api";
+import useApiResource from "../hooks/useApiResource";
 
-const metricOptions = ["Heart Rate", "Oxygen Saturation", "Body Temperature", "Sleep Duration", "Physical Activity", "Stress Indicator"];
+const metricOptions = ["Heart Rate", "Blood Pressure", "Oxygen Saturation", "Body Temperature", "Respiratory Rate", "Sleep Duration", "Physical Activity", "Stress Indicator"];
 
 export default function HealthMonitoring() {
+  const loadHealthData = useCallback(async ({ signal }) => {
+    const [readings, history] = await Promise.all([
+      getHealthReadings({}, { signal }),
+      getHealthHistory({ signal }),
+    ]);
+    return { readings, history };
+  }, []);
+  const { data, error, loading, reload } = useApiResource(loadHealthData);
   const [selectedMetric, setSelectedMetric] = useState(metricOptions[0]);
-  const matchingAlerts = demoHealthData
+  const readings = data?.readings || [];
+  const matchingAlerts = (data?.history || [])
     .filter((alert) => alert.parameter === selectedMetric)
     .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0));
-  const selectedAlert = matchingAlerts[0];
+  const selectedAlert = matchingAlerts[0] || readings.find((reading) => reading.parameter === selectedMetric);
 
   return (
     <div className="app-page">
@@ -19,16 +29,29 @@ export default function HealthMonitoring() {
         <div>
           <span className="app-eyebrow">CREW VITALS</span>
           <h1 id="health-monitoring-title">Health Monitoring</h1>
-          <p>Explore available sample health readings and their recorded trends.</p>
+          <p>Explore health readings and sample trends returned by the backend.</p>
         </div>
-        <span className="app-demo-tag">DEMONSTRATION DATA</span>
+        <span className="app-demo-tag">SIMULATED / HISTORICAL DATA</span>
       </header>
 
+      {loading || error ? (
+        <section className="app-panel" role={error ? "alert" : "status"}>
+          {loading && <p>Loading health readings from the backend…</p>}
+          {error && (
+            <>
+              <h2>Unable to load health data</h2>
+              <p>{error.message}</p>
+              <button type="button" onClick={reload}>Retry</button>
+            </>
+          )}
+        </section>
+      ) : (
+        <>
       <section className="app-content-section">
         <div className="app-section-heading">
-          <div><h2>Available health indicators</h2><p>Values come from the included demo alert records.</p></div>
+          <div><h2>Available health indicators</h2><p>Values are supplied by the backend demonstration dataset; they are not live sensor readings.</p></div>
         </div>
-        <HealthCards alerts={demoHealthData} />
+        <HealthCards alerts={readings} />
       </section>
 
       <section className="app-panel app-monitor-panel">
@@ -54,7 +77,9 @@ export default function HealthMonitoring() {
           <p className="app-empty-state">No sample data is available for {selectedMetric}.</p>
         )}
       </section>
-      <p className="app-data-disclaimer">No live sensors are connected. These readings are demonstration data, not medical guidance.</p>
+      <p className="app-data-disclaimer">No live sensors are connected. These backend-served simulated readings and historical samples are not medical guidance.</p>
+        </>
+      )}
     </div>
   );
 }
