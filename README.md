@@ -68,7 +68,7 @@ ASTRA provides a centralized platform to monitor astronaut health indicators, vi
 
 ---
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 ### Frontend
 
@@ -234,4 +234,4 @@ This project is developed as a NASA Space Apps Challenge prototype. Demonstratio
 
 GitHub: https://github.com/Rohitkumar-72/astronaut-health-monitoring
 
-**Built for the NASA Space Apps Challenge 2026.** 🚀
+**Built for the NASA Space Apps Challenge 2026.** 
