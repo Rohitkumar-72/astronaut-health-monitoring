@@ -1,4 +1,4 @@
-# 🚀 ASTRA – Astronaut Health Monitoring System
+#  ASTRA – Astronaut Health Monitoring System
 
 ### NASA Space Apps Challenge 2026
 
@@ -8,7 +8,7 @@ The goal is to help astronauts and mission teams identify potential health conce
 
 ---
 
-## 🌌 Project Overview
+##  Project Overview
 
 Long-duration space missions expose astronauts to several health risks, including:
 
@@ -24,7 +24,7 @@ ASTRA provides a centralized platform to monitor astronaut health indicators, vi
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 ### 1. Dashboard
 
@@ -93,7 +93,7 @@ ASTRA provides a centralized platform to monitor astronaut health indicators, vi
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```text
 astronaut-health-monitoring/
@@ -129,7 +129,7 @@ astronaut-health-monitoring/
 
 ---
 
-## ⚙️ Installation and Setup
+##  Installation and Setup
 
 ### Prerequisites
 
@@ -199,7 +199,7 @@ Open the local URL displayed in your terminal.
 
 ---
 
-## 🔗 Application Architecture
+##  Application Architecture
 
 ASTRA follows a frontend-backend architecture.
 
@@ -210,19 +210,19 @@ ASTRA follows a frontend-backend architecture.
 
 ---
 
-## 🎯 Project Goal
+##  Project Goal
 
 To support astronaut health monitoring during long-duration space missions through centralized health data visualization, risk identification, and early warning support.
 
 ---
 
-## ⚠️ Disclaimer
+##  Disclaimer
 
 This project is developed as a NASA Space Apps Challenge prototype. Demonstration data and risk indicators are not a substitute for professional medical diagnosis or clinical decision-making.
 
 ---
 
-## 🏆 Challenge
+##  Challenge
 
 **NASA Space Apps Challenge 2026**
 
@@ -230,7 +230,7 @@ This project is developed as a NASA Space Apps Challenge prototype. Demonstratio
 
 ---
 
-## 👨‍💻 Repository
+##  Repository
 
 GitHub: https://github.com/Rohitkumar-72/astronaut-health-monitoring
 
