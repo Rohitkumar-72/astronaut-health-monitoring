@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { Link } from "react-router-dom";
-import AnatomyPanel from "../components/AnatomyPanel";
 import HealthTrendCard from "../components/HealthTrendCard";
 import RiskBadge from "../components/RiskBadge";
 import { getDashboardOverview } from "../services/api";
@@ -106,7 +105,7 @@ const comparisonCharts = [
   { parameter: "Physical Activity", label: "Physical activity", unit: "%", minimum: 0, maximum: 100 },
 ];
 
-const crewLineColors = ["#18a9c5", "#3582c6", "#e7a43a", "#31a77d"];
+const crewLineColors = ["#36d5f2", "#398dff", "#a276ff", "#22c985"];
 
 function CrewComparisonChart({ definition, readings }) {
   const series = readings
@@ -158,10 +157,10 @@ function CrewComparisonChart({ definition, readings }) {
 
 function RiskDistribution({ risks, crewCount }) {
   const levels = [
-    { id: "Low", label: "Low risk", color: "#31a77d" },
-    { id: "Medium", label: "Moderate", color: "#e5aa3d" },
-    { id: "High", label: "High risk", color: "#e47e42" },
-    { id: "Critical", label: "Critical", color: "#d94e64" },
+    { id: "Low", label: "Low risk", color: "#22c985" },
+    { id: "Medium", label: "Moderate", color: "#f4c65e" },
+    { id: "High", label: "High risk", color: "#ff963d" },
+    { id: "Critical", label: "Critical", color: "#ff5268" },
   ];
   const counts = levels.map((level) => ({
     ...level,
@@ -197,6 +196,64 @@ function RiskDistribution({ risks, crewCount }) {
         </div>
       </div>
     </article>
+  );
+}
+
+function CrewSnapshot({ crew, readings }) {
+  return (
+    <section className="dashboard-crew-snapshot" aria-labelledby="crew-snapshot-title">
+      <div className="dashboard-section-heading">
+        <div>
+          <span className="dashboard-section-kicker">CREW AT A GLANCE</span>
+          <h2 id="crew-snapshot-title">Crew snapshot</h2>
+          <p>Roster and latest available sample indicators from the backend.</p>
+        </div>
+        <Link className="dashboard-section-link" to="/crew-overview">Open crew overview <span aria-hidden="true">→</span></Link>
+      </div>
+      <div className="dashboard-crew-grid">
+        {crew.map((member) => {
+          const memberReadings = readings.filter((reading) => reading.crewId === member.id);
+          const latestMetrics = ["Heart Rate", "Oxygen Saturation"]
+            .map((parameter) => memberReadings.find((reading) => reading.parameter === parameter))
+            .filter(Boolean);
+          const riskClass = String(member.risk || "unknown").toLowerCase();
+          const initials = String(member.name || "Crew")
+            .split(/\s+/)
+            .map((part) => part[0])
+            .slice(0, 2)
+            .join("");
+
+          return (
+            <article className="dashboard-crew-card" key={member.id}>
+              <div className="dashboard-crew-identity">
+                <span className="dashboard-crew-avatar" aria-hidden="true">{initials}</span>
+                <div>
+                  <strong>{member.name || "Crew member"}</strong>
+                  <span>{member.role || member.id}</span>
+                </div>
+                <span className={`dashboard-crew-risk dashboard-crew-risk-${riskClass}`}>
+                  {member.risk || "Unclassified"}
+                </span>
+              </div>
+              <div className="dashboard-crew-score">
+                <span>{member.id}</span>
+                <strong>{Number.isFinite(Number(member.score)) ? `${member.score}` : "—"}<small> / 100</small></strong>
+              </div>
+              <div className="dashboard-crew-metrics">
+                {latestMetrics.map((reading) => (
+                  <span key={reading.parameter}>
+                    <small>{reading.parameter === "Oxygen Saturation" ? "SpO₂" : reading.parameter}</small>
+                    <strong>{reading.value} <small>{reading.unit}</small></strong>
+                  </span>
+                ))}
+                {latestMetrics.length === 0 && <span className="dashboard-crew-no-data">No current sample indicators</span>}
+              </div>
+            </article>
+          );
+        })}
+        {crew.length === 0 && <p className="dashboard-comparison-empty">No crew roster is available.</p>}
+      </div>
+    </section>
   );
 }
 
@@ -238,8 +295,8 @@ export default function Dashboard() {
         <header className="dashboard-page-heading">
           <div>
             <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
-            <h1 id="dashboard-title">Good morning, Medical Officer</h1>
-            <p>Mission health overview and crew monitoring</p>
+            <h1 id="dashboard-title">Mission Control</h1>
+            <p>Astronaut health intelligence and mission overview · simulated data</p>
           </div>
           <div className="dashboard-data-source">
             <span className="dashboard-source-dot" />
@@ -265,8 +322,8 @@ export default function Dashboard() {
       <header className="dashboard-page-heading">
         <div>
           <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
-          <h1 id="dashboard-title">Good morning, Medical Officer</h1>
-          <p>Mission health overview and crew monitoring</p>
+          <h1 id="dashboard-title">Mission Control</h1>
+          <p>Astronaut health intelligence and mission overview · simulated data</p>
         </div>
         <div className="dashboard-data-source">
           <span className="dashboard-source-dot" />
@@ -318,8 +375,6 @@ export default function Dashboard() {
         </article>
       </section>
 
-      <AnatomyPanel readings={alerts} />
-
       <section className="dashboard-section">
         <div className="dashboard-section-heading">
           <div>
@@ -340,6 +395,8 @@ export default function Dashboard() {
           <div className="app-panel dashboard-empty-panel">No health measurements are available in the current dataset.</div>
         )}
       </section>
+
+      <CrewSnapshot crew={crew} readings={healthReadings} />
 
       <section className="dashboard-bottom-grid">
         <section className="app-panel dashboard-alerts-panel">

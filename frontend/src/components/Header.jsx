@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 
 const pageTitles = [
   ["/crew-overview", "Crew Overview"],
+  ["/anatomy", "Anatomy Explorer"],
   ["/health-monitoring", "Health Monitoring"],
   ["/health-history", "Health History"],
   ["/risk-alerts", "Risk Alerts"],
@@ -11,8 +12,8 @@ const pageTitles = [
 export default function Header({ menuButtonRef, isOpen, isCollapsed, isMobile, onToggle }) {
   const { pathname } = useLocation();
   const pageTitle = pathname === "/dashboard" || pathname === "/"
-    ? "Mission Dashboard"
-    : pageTitles.find(([route]) => pathname.startsWith(route))?.[1] || "Mission Dashboard";
+    ? "Mission Control"
+    : pageTitles.find(([route]) => pathname.startsWith(route))?.[1] || "Mission Control";
 
   return (
     <header className="app-topbar">

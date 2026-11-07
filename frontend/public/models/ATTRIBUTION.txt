@@ -1,4 +1,5 @@
-BodyParts3D skin surface model
+Previous model asset: BodyParts3D skin surface model
+Status: Retained in the repository; not used by the current viewer.
 
 Source: BodyParts3D, The Database Center for Life Science (DBCLS)
 Attribution: "BodyParts3D, © The Database Center for Life Science licensed under CC Attribution 4.0 International".
@@ -12,3 +13,32 @@ The OBJ contains a single skin surface mesh without a texture map or separate
 organ meshes. Skin color variation and the fitted navy shorts are generated
 procedurally; a localized surface adjustment provides modest coverage.
 Interactive region selection uses approximate surface zones.
+
+Current viewer model:
+
+Name: "Spacesuit.glb" from the Ultimate Modular Men Pack
+Creator: Quaternius
+Pack page: https://quaternius.com/packs/ultimatemodularcharacters.html
+Asset source: https://github.com/trebeljahr/quaternius-showcase/blob/main/public/glb/modular_men/Spacesuit.glb
+License: CC0 1.0 (public domain dedication)
+License reference: https://creativecommons.org/publicdomain/zero/1.0/
+
+The local GLB is loaded directly by the Anatomy Explorer. Its material colors
+are adjusted at runtime to match the ASTRA white, silver, blue, and cyan palette.
+A separate 3D life-support pack is added to the suit at runtime; no external
+model URL is required.
+
+Archived model asset (retained, not used by the current viewer):
+
+Name: "Regions of human body100.fbx" (Z-Anatomy body-region meshes)
+Source: Z-Anatomy project, by Lluís Vinent Juanico, featuring models from the
+Z-Anatomy project.
+Source repository: https://github.com/LluisV/Z-Anatomy
+Source file: https://github.com/LluisV/Z-Anatomy/blob/PC-Version/Resources/Models/FBX/Regions%20of%20human%20body100.fbx
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+License information: https://creativecommons.org/licenses/by-sa/4.0/
+
+The FBX contains separately named exterior body-region meshes. It does not
+include independently selectable internal organs or organ systems. The
+application adjusts material colors and suppresses thin leader-line meshes at
+runtime; the original FBX asset is not modified.

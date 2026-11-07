@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 
 import Dashboard from "./pages/Dashboard";
+import AnatomyExplorer from "./pages/AnatomyExplorer";
 import CrewOverview from "./components/CrewOverview";
 import HealthMonitoring from "./pages/HealthMonitoring";
 import RiskAlerts from "./pages/RiskAlerts";
@@ -15,12 +16,19 @@ import "./App.css";
 import "./theme.css";
 
 function AppLayout() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
+  const navigate = useNavigate();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 1023px)").matches);
   const drawerRef = useRef(null);
   const menuButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (pathname === "/" && hash === "#body-explorer") {
+      navigate("/anatomy", { replace: true });
+    }
+  }, [hash, navigate, pathname]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -126,6 +134,11 @@ function AppLayout() {
             <Route
               path="/crew-overview"
               element={<CrewOverview />}
+            />
+
+            <Route
+              path="/anatomy"
+              element={<AnatomyExplorer />}
             />
 
             <Route
