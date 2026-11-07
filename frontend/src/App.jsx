@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
@@ -12,11 +12,25 @@ import HealthHistory from "./pages/HealthHistory";
 import Setting from "./pages/Setting";
 
 import "./App.css";
+import "./theme.css";
 
 function AppLayout() {
+  const { pathname } = useLocation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 1023px)").matches);
   const drawerRef = useRef(null);
   const menuButtonRef = useRef(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const updateViewport = (event) => {
+      setIsMobile(event.matches);
+      setIsDrawerOpen(false);
+    };
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
 
   useEffect(() => {
     if (!isDrawerOpen) return undefined;
@@ -72,14 +86,15 @@ function AppLayout() {
   }, [isDrawerOpen]);
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout${isSidebarCollapsed ? " app-layout-sidebar-collapsed" : ""}`}>
       <Sidebar
         drawerRef={drawerRef}
         isOpen={isDrawerOpen}
+        isMobile={isMobile}
         onNavigate={() => setIsDrawerOpen(false)}
         onClose={() => setIsDrawerOpen(false)}
       />
-      {isDrawerOpen && (
+      {isMobile && isDrawerOpen && (
         <button
           type="button"
           className="app-sidebar-backdrop"
@@ -91,47 +106,54 @@ function AppLayout() {
       <main className="app-main-content">
         <Header
           menuButtonRef={menuButtonRef}
-          isOpen={isDrawerOpen}
-          onToggle={() => setIsDrawerOpen((isOpen) => !isOpen)}
+          isOpen={isMobile && isDrawerOpen}
+          isCollapsed={isSidebarCollapsed}
+          isMobile={isMobile}
+          onToggle={() => {
+            if (isMobile) setIsDrawerOpen((isOpen) => !isOpen);
+            else setIsSidebarCollapsed((collapsed) => !collapsed);
+          }}
         />
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
+        <div className="app-route-transition" key={pathname}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
 
-          <Route
-            path="/dashboard"
-            element={<Dashboard />}
-          />
+            <Route
+              path="/dashboard"
+              element={<Dashboard />}
+            />
 
-          <Route
-            path="/crew-overview"
-            element={<CrewOverview />}
-          />
+            <Route
+              path="/crew-overview"
+              element={<CrewOverview />}
+            />
 
-          <Route
-            path="/health-monitoring"
-            element={<HealthMonitoring />}
-          />
+            <Route
+              path="/health-monitoring"
+              element={<HealthMonitoring />}
+            />
 
-          <Route
-            path="/risk-alerts"
-            element={<RiskAlerts />}
-          />
+            <Route
+              path="/risk-alerts"
+              element={<RiskAlerts />}
+            />
 
-          <Route
-            path="/health-history"
-            element={<HealthHistory />}
-          />
+            <Route
+              path="/health-history"
+              element={<HealthHistory />}
+            />
 
-          <Route
-            path="/settings"
-            element={<Setting />}
-          />
+            <Route
+              path="/settings"
+              element={<Setting />}
+            />
 
-          <Route
-            path="*"
-            element={<Navigate to="/" replace />}
-          />
-        </Routes>
+            <Route
+              path="*"
+              element={<Navigate to="/" replace />}
+            />
+          </Routes>
+        </div>
       </main>
     </div>
   );

@@ -523,7 +523,7 @@ export default function AnatomyPanel({ readings }) {
   const isUnavailable = renderState === "unavailable";
 
   return (
-    <section className="app-panel dashboard-anatomy-panel">
+    <section className="app-panel dashboard-anatomy-panel" id="body-explorer">
       <div className="dashboard-section-heading anatomy-heading">
         <div>
           <span className="dashboard-section-kicker">INTERACTIVE ANATOMY</span>

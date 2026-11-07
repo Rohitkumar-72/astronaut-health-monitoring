@@ -7,6 +7,10 @@ export default function HealthHistory() {
   const loadHistory = useCallback(({ signal }) => getHealthHistory({ signal }), []);
   const { data: records, error, loading, reload } = useApiResource(loadHistory);
   const [query, setQuery] = useState("");
+  const [parameterFilter, setParameterFilter] = useState("All");
+  const [crewFilter, setCrewFilter] = useState("All");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const history = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return [...(records || [])]
@@ -15,8 +19,18 @@ export default function HealthHistory() {
           .toLowerCase()
           .includes(normalizedQuery)
       )
+      .filter((alert) => parameterFilter === "All" || alert.parameter === parameterFilter)
+      .filter((alert) => crewFilter === "All" || alert.astronautId === crewFilter)
+      .filter((alert) => {
+        const timestamp = Date.parse(alert.timestamp);
+        if (!Number.isFinite(timestamp)) return !startDate && !endDate;
+        const date = new Date(timestamp).toISOString().slice(0, 10);
+        return (!startDate || date >= startDate) && (!endDate || date <= endDate);
+      })
       .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0));
-  }, [query, records]);
+  }, [query, records, parameterFilter, crewFilter, startDate, endDate]);
+  const parameters = [...new Set((records || []).map((alert) => alert.parameter).filter(Boolean))].sort();
+  const crewMembers = [...new Map((records || []).map((alert) => [alert.astronautId, alert.astronautName])).entries()];
 
   return (
     <div className="app-page">
@@ -46,6 +60,26 @@ export default function HealthHistory() {
           <label className="app-search-label">
             Search history
             <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Astronaut, metric, status..." />
+          </label>
+        </div>
+        <div className="app-history-filters" aria-label="Filter health history">
+          <label className="app-select-label">Parameter
+            <select value={parameterFilter} onChange={(event) => setParameterFilter(event.target.value)}>
+              <option value="All">All parameters</option>
+              {parameters.map((parameter) => <option key={parameter} value={parameter}>{parameter}</option>)}
+            </select>
+          </label>
+          <label className="app-select-label">Crew member
+            <select value={crewFilter} onChange={(event) => setCrewFilter(event.target.value)}>
+              <option value="All">All crew</option>
+              {crewMembers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
+          <label className="app-select-label">From
+            <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} />
+          </label>
+          <label className="app-select-label">To
+            <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} />
           </label>
         </div>
         <div className="app-history-list">

@@ -99,10 +99,115 @@ function AlertItem({ alert }) {
   );
 }
 
+const comparisonCharts = [
+  { parameter: "Heart Rate", label: "Heart rate", unit: "BPM", minimum: 40, maximum: 140 },
+  { parameter: "Oxygen Saturation", label: "Blood oxygen", unit: "%", minimum: 85, maximum: 100 },
+  { parameter: "Sleep Duration", label: "Sleep duration", unit: "hours", minimum: 0, maximum: 10 },
+  { parameter: "Physical Activity", label: "Physical activity", unit: "%", minimum: 0, maximum: 100 },
+];
+
+const crewLineColors = ["#18a9c5", "#3582c6", "#e7a43a", "#31a77d"];
+
+function CrewComparisonChart({ definition, readings }) {
+  const series = readings
+    .filter((reading) => reading.parameter === definition.parameter && Array.isArray(reading.history) && reading.history.length > 1)
+    .slice(0, 4);
+
+  return (
+    <article className="dashboard-comparison-card">
+      <div className="dashboard-comparison-heading">
+        <div><span className="dashboard-section-kicker">CREW TREND</span><h3>{definition.label}</h3></div>
+        <span>{definition.unit}</span>
+      </div>
+      {series.length ? (
+        <>
+          <div className="dashboard-comparison-plot">
+            <svg viewBox="0 0 300 120" role="img" aria-label={`${definition.label} sample trends by crew member`}>
+              {[25, 55, 85, 110].map((y) => <line key={y} x1="8" x2="294" y1={y} y2={y} className="dashboard-comparison-guide" />)}
+              {series.map((reading, seriesIndex) => {
+                const values = reading.history.map(Number).filter(Number.isFinite);
+                const points = values.map((value, index) => {
+                  const x = 12 + (index / (values.length - 1)) * 276;
+                  const normalized = (value - definition.minimum) / (definition.maximum - definition.minimum);
+                  const y = 108 - Math.max(0, Math.min(1, normalized)) * 88;
+                  return { x, y, value };
+                });
+                return (
+                  <g key={reading.crewId}>
+                    <polyline points={points.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke={crewLineColors[seriesIndex]} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                    {points.map((point, index) => (
+                      <circle key={`${reading.crewId}-${index}`} cx={point.x} cy={point.y} r="3" fill={crewLineColors[seriesIndex]}>
+                        <title>{`${reading.astronautName}: ${point.value} ${definition.unit} · sample ${index + 1}`}</title>
+                      </circle>
+                    ))}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <div className="dashboard-comparison-legend">
+            {series.map((reading, index) => (
+              <span key={reading.crewId}><i style={{ backgroundColor: crewLineColors[index] }} />{reading.astronautName}</span>
+            ))}
+          </div>
+        </>
+      ) : <p className="dashboard-comparison-empty">No trend samples are available for this indicator.</p>}
+    </article>
+  );
+}
+
+function RiskDistribution({ risks, crewCount }) {
+  const levels = [
+    { id: "Low", label: "Low risk", color: "#31a77d" },
+    { id: "Medium", label: "Moderate", color: "#e5aa3d" },
+    { id: "High", label: "High risk", color: "#e47e42" },
+    { id: "Critical", label: "Critical", color: "#d94e64" },
+  ];
+  const counts = levels.map((level) => ({
+    ...level,
+    count: risks.filter((risk) => risk.id === level.id).length,
+  }));
+  const total = counts.reduce((sum, level) => sum + level.count, 0) || crewCount;
+  let start = 0;
+  const stops = counts.map((level) => {
+    const percent = total ? (level.count / total) * 100 : 0;
+    const stop = `${level.color} ${start}% ${start + percent}%`;
+    start += percent;
+    return stop;
+  });
+
+  return (
+    <article className="dashboard-glass-panel dashboard-risk-panel">
+      <div className="dashboard-panel-title">
+        <div><span className="dashboard-section-kicker">RULE-BASED OVERVIEW</span><h2>Crew risk distribution</h2></div>
+        <Link className="dashboard-section-link" to="/crew-overview">Details <span aria-hidden="true">→</span></Link>
+      </div>
+      <p className="dashboard-panel-subtitle">Illustrative bands based on available sample history; not a diagnosis.</p>
+      <div className="dashboard-risk-content">
+        <div className="dashboard-risk-donut" style={{ background: `conic-gradient(${stops.join(", ")})` }}>
+          <span><strong>{crewCount}</strong><small>crew</small></span>
+        </div>
+        <div className="dashboard-risk-legend">
+          {counts.map((level) => (
+            <div key={level.id}>
+              <span><i style={{ backgroundColor: level.color }} />{level.label}</span>
+              <strong>{level.count}<small>{total ? `${Math.round(level.count / total * 100)}%` : "0%"}</small></strong>
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export default function Dashboard() {
   const loadOverview = useCallback(({ signal }) => getDashboardOverview({ signal }), []);
   const { data: overview, error, loading, reload } = useApiResource(loadOverview);
   const alerts = overview?.alerts || [];
+  const crew = overview?.crew || [];
+  const mission = overview?.mission;
+  const risks = overview?.risks || [];
+  const healthReadings = overview?.healthReadings || [];
   const sortedAlerts = [...alerts].sort(newestFirst);
   const latestByMetric = getLatestByMetric(alerts);
   const latestHeartRate = latestByMetric.get("Heart Rate");
@@ -120,6 +225,12 @@ export default function Dashboard() {
     0
   );
   const validMetrics = metricDefinitions.filter(({ parameter }) => latestByMetric.has(parameter));
+  const healthyCrew = risks.filter((risk) => risk.id === "Low").length;
+  const observationCrew = risks.filter((risk) => risk.id === "Medium").length;
+  const criticalAlerts = activeAlerts.filter((alert) => alert.severity === "Critical").length;
+  const averageScore = crew.length
+    ? Math.round(crew.reduce((sum, member) => sum + (Number(member.score) || 0), 0) / crew.length)
+    : 0;
 
   if (loading || error || !overview) {
     return (
@@ -127,8 +238,8 @@ export default function Dashboard() {
         <header className="dashboard-page-heading">
           <div>
             <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
-            <h1 id="dashboard-title">Astronaut Health Intelligence</h1>
-            <p>Health observations and risk indicators from the available demonstration dataset.</p>
+            <h1 id="dashboard-title">Good morning, Medical Officer</h1>
+            <p>Mission health overview and crew monitoring</p>
           </div>
           <div className="dashboard-data-source">
             <span className="dashboard-source-dot" />
@@ -154,14 +265,42 @@ export default function Dashboard() {
       <header className="dashboard-page-heading">
         <div>
           <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
-          <h1 id="dashboard-title">Astronaut Health Intelligence</h1>
-          <p>Health observations and risk indicators from the available demonstration dataset.</p>
+          <h1 id="dashboard-title">Good morning, Medical Officer</h1>
+          <p>Mission health overview and crew monitoring</p>
         </div>
         <div className="dashboard-data-source">
           <span className="dashboard-source-dot" />
           <span>BACKEND · DEMONSTRATION DATA</span>
         </div>
       </header>
+
+      <section className="dashboard-mission-strip" aria-label="Mission information">
+        <div className="dashboard-mission-name">
+          <span className="dashboard-mission-mark" aria-hidden="true">A</span>
+          <div><small>CURRENT MISSION · SIMULATED</small><strong>{mission?.name || "Mission information unavailable"}</strong></div>
+        </div>
+        <div><small>MISSION DAY</small><strong>{mission ? `${mission.day} / ${mission.durationDays}` : "—"}</strong></div>
+        <div><small>MISSION STATUS</small><strong className="dashboard-mission-status"><i />{mission?.status || "Unavailable"}</strong></div>
+        <div><small>CREW MEMBERS</small><strong>{crew.length}</strong></div>
+        <div><small>LAST SYNC</small><strong>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong></div>
+      </section>
+
+      <section className="dashboard-command-stats" aria-label="Crew health summary">
+        <article className="dashboard-command-stat"><span className="dashboard-command-icon">◉</span><div><small>Total crew members</small><strong>{crew.length}</strong><span>Mission roster</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-healthy"><span className="dashboard-command-icon">✓</span><div><small>Healthy</small><strong>{healthyCrew}</strong><span>Low illustrative risk</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-watch"><span className="dashboard-command-icon">◷</span><div><small>Under observation</small><strong>{observationCrew}</strong><span>Moderate sample risk</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-critical"><span className="dashboard-command-icon">!</span><div><small>Critical alerts</small><strong>{criticalAlerts}</strong><span>Unresolved records</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-score"><span className="dashboard-command-icon">↗</span><div><small>Average health score</small><strong>{averageScore}<small> / 100</small></strong><span>Rule-based demo summary</span></div></article>
+      </section>
+
+      <section className="dashboard-intelligence-grid" aria-label="Crew health analytics">
+        <div className="dashboard-comparison-grid">
+          {comparisonCharts.map((definition) => (
+            <CrewComparisonChart key={definition.parameter} definition={definition} readings={healthReadings} />
+          ))}
+        </div>
+        <RiskDistribution risks={risks} crewCount={crew.length} />
+      </section>
 
       <section className="dashboard-kpi-grid" aria-label="Latest health indicators">
         <MetricKpi label="Heart rate" alert={latestHeartRate} />
