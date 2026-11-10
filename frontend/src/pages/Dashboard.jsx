@@ -300,7 +300,7 @@ export default function Dashboard() {
           </div>
           <div className="dashboard-data-source">
             <span className="dashboard-source-dot" />
-            <span>BACKEND DEMONSTRATION DATA</span>
+             
           </div>
         </header>
         <section className="app-panel" role={error ? "alert" : "status"}>
@@ -323,18 +323,18 @@ export default function Dashboard() {
         <div>
           <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
           <h1 id="dashboard-title">Mission Control</h1>
-          <p>Astronaut health intelligence and mission overview · simulated data</p>
+          <p>Astronaut health intelligence and mission overview</p>
         </div>
         <div className="dashboard-data-source">
-          <span className="dashboard-source-dot" />
-          <span>BACKEND · DEMONSTRATION DATA</span>
+           
+          
         </div>
       </header>
 
       <section className="dashboard-mission-strip" aria-label="Mission information">
         <div className="dashboard-mission-name">
           <span className="dashboard-mission-mark" aria-hidden="true">A</span>
-          <div><small>CURRENT MISSION · SIMULATED</small><strong>{mission?.name || "Mission information unavailable"}</strong></div>
+          <div><small>CURRENT MISSION</small><strong>{mission?.name || "Mission information unavailable"}</strong></div>
         </div>
         <div><small>MISSION DAY</small><strong>{mission ? `${mission.day} / ${mission.durationDays}` : "—"}</strong></div>
         <div><small>MISSION STATUS</small><strong className="dashboard-mission-status"><i />{mission?.status || "Unavailable"}</strong></div>
