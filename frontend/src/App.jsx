@@ -3,8 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
+import AssistantFloatingButton from "./components/AssistantFloatingButton";
+import { AssistantProvider } from "./context/AssistantProvider";
 
 import Dashboard from "./pages/Dashboard";
+import AiAssistant from "./pages/AiAssistant";
 import AnatomyExplorer from "./pages/AnatomyExplorer";
 import CrewOverview from "./components/CrewOverview";
 import HealthMonitoring from "./pages/HealthMonitoring";
@@ -147,6 +150,11 @@ function AppLayout() {
             />
 
             <Route
+              path="/ai-assistant"
+              element={<AiAssistant />}
+            />
+
+            <Route
               path="/risk-alerts"
               element={<RiskAlerts />}
             />
@@ -168,6 +176,7 @@ function AppLayout() {
           </Routes>
         </div>
       </main>
+      {pathname !== "/ai-assistant" && !isDrawerOpen && <AssistantFloatingButton />}
     </div>
   );
 }
@@ -175,7 +184,9 @@ function AppLayout() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppLayout />
+      <AssistantProvider>
+        <AppLayout />
+      </AssistantProvider>
     </BrowserRouter>
   );
 }

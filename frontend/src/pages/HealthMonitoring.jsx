@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import HealthCards from "../components/HealthCards";
 import HealthChart from "../components/HealthChart";
+import HealthRecordCapture from "../components/HealthRecordCapture";
 import RiskBadge from "../components/RiskBadge";
 import { getHealthHistory, getHealthReadings } from "../services/api";
 import useApiResource from "../hooks/useApiResource";
@@ -33,6 +34,16 @@ export default function HealthMonitoring() {
         </div>
         <span className="app-demo-tag">SIMULATED / HISTORICAL DATA</span>
       </header>
+
+      <section className="app-content-section" aria-labelledby="health-voice-heading">
+        <div className="app-section-heading">
+          <div>
+            <h2 id="health-voice-heading">Voice health input</h2>
+            <p>Dictate a report, review the extracted values, choose the astronaut, and confirm before saving.</p>
+          </div>
+        </div>
+        <HealthRecordCapture onSaved={reload} />
+      </section>
 
       {loading || error ? (
         <section className="app-panel" role={error ? "alert" : "status"}>

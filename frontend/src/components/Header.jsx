@@ -4,6 +4,7 @@ const pageTitles = [
   ["/crew-overview", "Crew Overview"],
   ["/anatomy", "Anatomy Explorer"],
   ["/health-monitoring", "Health Monitoring"],
+  ["/ai-assistant", "ASTRA AI Assistant"],
   ["/health-history", "Health History"],
   ["/risk-alerts", "Risk Alerts"],
   ["/settings", "Settings"],

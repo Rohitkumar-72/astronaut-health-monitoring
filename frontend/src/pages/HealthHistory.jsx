@@ -1,11 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
 import RiskBadge from "../components/RiskBadge";
-import { getHealthHistory } from "../services/api";
+import { getHealthHistory, getHealthRecords } from "../services/api";
 import useApiResource from "../hooks/useApiResource";
 
 export default function HealthHistory() {
   const loadHistory = useCallback(({ signal }) => getHealthHistory({ signal }), []);
   const { data: records, error, loading, reload } = useApiResource(loadHistory);
+  const loadConfirmedRecords = useCallback(({ signal }) => getHealthRecords({ signal }), []);
+  const {
+    data: confirmedRecords,
+    error: confirmedRecordsError,
+    loading: confirmedRecordsLoading,
+    reload: reloadConfirmedRecords,
+  } = useApiResource(loadConfirmedRecords);
   const [query, setQuery] = useState("");
   const [parameterFilter, setParameterFilter] = useState("All");
   const [crewFilter, setCrewFilter] = useState("All");
@@ -102,7 +109,63 @@ export default function HealthHistory() {
         </div>
       </section>
       )}
-      <p className="app-data-disclaimer">History reflects backend-served demonstration alert data only; it is not a complete medical record.</p>
+      <section className="app-panel health-record-history-panel" aria-labelledby="crew-reports-heading">
+        <div className="app-section-heading">
+          <div>
+            <h2 id="crew-reports-heading">Crew-confirmed health reports</h2>
+            <p>Self-reported entries reviewed and confirmed before submission; separate from sensor readings and alerts.</p>
+          </div>
+        </div>
+        {confirmedRecordsLoading && <p role="status">Loading confirmed reports…</p>}
+        {confirmedRecordsError && (
+          <div role="alert">
+            <p>Unable to load confirmed reports: {confirmedRecordsError.message}</p>
+            <button type="button" onClick={reloadConfirmedRecords}>Retry</button>
+          </div>
+        )}
+        {!confirmedRecordsLoading && !confirmedRecordsError && confirmedRecords?.length === 0 && (
+          <p className="app-empty-state">No astronaut-confirmed reports have been recorded in this backend session.</p>
+        )}
+        <div className="health-record-history-list">
+          {(confirmedRecords || []).map((record) => (
+            <article className="health-record-history-card" key={record.id}>
+              <div className="health-record-history-heading">
+                <div>
+                  <strong>{record.astronautName}</strong>
+                  <span>{record.astronautId} · {record.source}</span>
+                </div>
+                <time dateTime={record.timestamp}>
+                  {Number.isNaN(Date.parse(record.timestamp)) ? "Unknown time" : new Date(record.timestamp).toLocaleString()}
+                </time>
+              </div>
+              {record.measurements.map((measurement) => {
+                const assessment = record.assessment.find((entry) => entry.parameter === measurement.parameter);
+                return (
+                  <div className="health-record-history-measurement" key={`${record.id}-${measurement.parameter}`}>
+                    <span><strong>{measurement.parameter}</strong> · {measurement.value} {measurement.unit}</span>
+                    <span>{assessment?.status || "Not assessed"}</span>
+                    {assessment?.severity && <RiskBadge severity={assessment.severity} />}
+                  </div>
+                );
+              })}
+              {record.symptoms.length > 0 && (
+                <p className="health-record-history-symptoms">
+                  <strong>Reported symptoms:</strong> {record.symptoms.join(", ")}
+                </p>
+              )}
+              {record.alertIds.length > 0 && (
+                <p className="health-record-history-alerts">
+                  Existing rule-based alert(s): {record.alertIds.join(", ")}. See Risk Alerts for current status.
+                </p>
+              )}
+              <p className="health-record-history-caveat">
+                Rule-based demonstration review only; not a diagnosis. Stored in backend memory and cleared on restart.
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <p className="app-data-disclaimer">Sample alert history and crew-confirmed self-reports are separate. The project has no database; confirmed reports are not durable medical records.</p>
     </div>
   );
 }

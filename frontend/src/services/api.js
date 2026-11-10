@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api")
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api")
   .replace(/\/+$/, "");
 
 export class ApiError extends Error {
@@ -66,6 +66,16 @@ export const getHealthReadings = (params, options) => request(`/health${queryStr
 export const getHealthMetrics = (options) => request("/health/metrics", options);
 export const getHealthTrends = (params, options) => request(`/health/trends${queryString(params)}`, options);
 export const getHealthHistory = (options) => request("/health/history", options);
+export const getHealthRecords = (options) => request("/health/records", options);
+export const createHealthRecord = (record) => request("/health/records", {
+  method: "POST",
+  body: JSON.stringify(record),
+});
+export const extractHealthData = (text, options = {}) => request("/assistant/extract", {
+  ...options,
+  method: "POST",
+  body: JSON.stringify({ text }),
+});
 export const getAlerts = (params, options) => request(`/alerts${queryString(params)}`, options);
 export const getAlert = (alertId, options) => request(`/alerts/${encodeURIComponent(alertId)}`, options);
 export const updateAlert = (alertId, status) => request(`/alerts/${encodeURIComponent(alertId)}`, {
@@ -81,3 +91,8 @@ export const getRisks = (options) => request("/risks", options);
 export const getCrewRisk = (crewId, options) => request(`/risks/${encodeURIComponent(crewId)}`, options);
 export const getMission = (options) => request("/mission", options);
 export const getMissionStatus = (options) => request("/mission/status", options);
+export const sendAssistantMessage = (messages, options = {}) => request("/assistant/chat", {
+  ...options,
+  method: "POST",
+  body: JSON.stringify({ messages }),
+});
