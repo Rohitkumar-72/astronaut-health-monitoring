@@ -195,6 +195,24 @@ export function AssistantProvider({ children }) {
     return text;
   }, [messages]);
 
+  const appendLiveMessage = useCallback(({ role, content }) => {
+    const text = content.trim();
+    if (!text || (role !== "user" && role !== "assistant")) return;
+    setMessages((currentMessages) => {
+      const lastMessage = currentMessages.at(-1);
+      if (role === "assistant" && lastMessage?.role !== "user" && lastMessage?.role !== "assistant") {
+        return currentMessages;
+      }
+      if (lastMessage?.role === role) {
+        return [
+          ...currentMessages.slice(0, -1),
+          { ...lastMessage, content: `${lastMessage.content}\n${text}` },
+        ];
+      }
+      return [...currentMessages, { role, content: text }];
+    });
+  }, []);
+
   const clearConversation = useCallback(() => {
     requestRef.current?.abort();
     requestRef.current = null;
@@ -212,9 +230,10 @@ export function AssistantProvider({ children }) {
     sendMessage,
     retryLastMessage,
     editLastMessage,
+    appendLiveMessage,
     clearConversation,
     speech,
-  }), [clearConversation, editLastMessage, error, messages, pending, retryLastMessage, sendMessage, speech]);
+  }), [appendLiveMessage, clearConversation, editLastMessage, error, messages, pending, retryLastMessage, sendMessage, speech]);
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
 }

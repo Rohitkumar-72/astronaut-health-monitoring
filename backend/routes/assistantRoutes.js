@@ -1,11 +1,12 @@
 const express = require("express");
 const dataService = require("../services/healthService");
 const assistantService = require("../services/assistantService");
-const { MODEL } = require("../config/geminiConfig");
+const { MODEL, LIVE_MODEL } = require("../config/geminiConfig");
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 2_000;
 const MAX_TOTAL_LENGTH = 12_000;
+const LIVE_LANGUAGES = ["auto", "English", "Hindi", "Hinglish"];
 
 function createRateLimiter({ limit = 12, windowMs = 60_000, now = Date.now } = {}) {
   const requestsByClient = new Map();
@@ -50,9 +51,13 @@ function createRateLimiter({ limit = 12, windowMs = 60_000, now = Date.now } = {
   };
 }
 
-function validateMessages(value) {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_MESSAGES) {
-    return "messages must contain between 1 and 20 conversation entries.";
+function validateMessages(value, { allowEmpty = false, requireUserEnding = true } = {}) {
+  if (
+    !Array.isArray(value)
+    || (!allowEmpty && value.length === 0)
+    || value.length > MAX_MESSAGES
+  ) {
+    return `messages must contain between ${allowEmpty ? 0 : 1} and 20 conversation entries.`;
   }
 
   let totalLength = 0;
@@ -76,7 +81,7 @@ function validateMessages(value) {
     totalLength += content.length;
   }
 
-  if (value.at(-1)?.role !== "user") {
+  if (requireUserEnding && value.at(-1)?.role !== "user") {
     return "The last conversation entry must be a user message.";
   }
   if (totalLength > MAX_TOTAL_LENGTH) {
@@ -95,6 +100,21 @@ function validateRequestBody(body) {
     return "The request must contain only a messages array.";
   }
   return validateMessages(body.messages);
+}
+
+function validateLiveTokenBody(body) {
+  if (
+    !body
+    || typeof body !== "object"
+    || Array.isArray(body)
+    || Object.keys(body).some((key) => key !== "messages" && key !== "language")
+  ) {
+    return "The request must contain a messages array and an optional supported language.";
+  }
+  if (body.language !== undefined && !LIVE_LANGUAGES.includes(body.language)) {
+    return "language must be auto, English, Hindi, or Hinglish.";
+  }
+  return validateMessages(body.messages, { allowEmpty: true, requireUserEnding: false });
 }
 
 function validateExtractionBody(body) {
@@ -216,6 +236,37 @@ function createAssistantRouter({
       }
       return res.status(500).json({
         error: { code: "AI_EXTRACTION_FAILED", message: "Health information could not be extracted." },
+      });
+    }
+  });
+
+  router.post("/live-token", rateLimiter, async (req, res) => {
+    const validationError = validateLiveTokenBody(req.body);
+    if (validationError) {
+      return res.status(400).json({
+        error: { code: "INVALID_ASSISTANT_REQUEST", message: validationError },
+      });
+    }
+
+    try {
+      const model = await healthDataService.getData();
+      const session = await aiService.createLiveSessionToken(
+        buildHealthContext(model),
+        { language: req.body.language || "auto" }
+      );
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        data: session,
+        meta: { model: LIVE_MODEL },
+      });
+    } catch (error) {
+      if (error.status && error.code) {
+        return res.status(error.status).json({
+          error: { code: error.code, message: error.message },
+        });
+      }
+      return res.status(500).json({
+        error: { code: "AI_REQUEST_FAILED", message: "The voice session could not be started." },
       });
     }
   });

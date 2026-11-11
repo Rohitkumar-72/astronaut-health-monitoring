@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAssistant } from "../context/useAssistant";
 import AssistantOrb from "./AssistantOrb";
+import LiveVoiceConversation from "./LiveVoiceConversation";
 import VoiceInput from "./VoiceInput";
 
 const suggestedQuestions = [
@@ -39,6 +40,7 @@ export default function AssistantChat({ compact = false }) {
     sendMessage,
     retryLastMessage,
     editLastMessage,
+    appendLiveMessage,
     clearConversation,
     speech,
   } = useAssistant();
@@ -46,6 +48,9 @@ export default function AssistantChat({ compact = false }) {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("idle");
   const [voiceError, setVoiceError] = useState(false);
+  const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
+  const [liveVoiceStatus, setLiveVoiceStatus] = useState("idle");
+  const [liveLanguage, setLiveLanguage] = useState("auto");
   const messageEndRef = useRef(null);
 
   useEffect(() => {
@@ -54,13 +59,22 @@ export default function AssistantChat({ compact = false }) {
 
   const handleVoiceStatus = useCallback((status) => setVoiceStatus(status), []);
   const handleVoiceError = useCallback((hasError) => setVoiceError(hasError), []);
+  const handleLiveVoiceStatus = useCallback((status) => setLiveVoiceStatus(status), []);
+  const closeLiveVoice = useCallback(() => {
+    setLiveVoiceOpen(false);
+    setLiveVoiceStatus("idle");
+  }, []);
+  const handleClearConversation = useCallback(() => {
+    clearConversation();
+  }, [clearConversation]);
   const submitMessage = useCallback(async (content) => {
     const text = content.trim();
     if (!text || pending || error) return;
     setDraft("");
     setVoiceOpen(false);
+    closeLiveVoice();
     await sendMessage(text);
-  }, [error, pending, sendMessage]);
+  }, [closeLiveVoice, error, pending, sendMessage]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -72,13 +86,13 @@ export default function AssistantChat({ compact = false }) {
     if (text) setDraft(text);
   };
 
-  const orbState = error || voiceError || speech.status === "error"
+  const orbState = error || voiceError || speech.status === "error" || liveVoiceStatus === "error"
     ? "error"
-    : voiceStatus === "listening" || voiceStatus === "requesting"
+    : voiceStatus === "listening" || voiceStatus === "requesting" || liveVoiceStatus === "listening"
       ? "listening"
-      : pending
+      : pending || liveVoiceStatus === "connecting" || liveVoiceStatus === "processing"
         ? "processing"
-        : speech.status === "speaking" || speech.status === "paused"
+        : liveVoiceStatus === "speaking" || speech.status === "speaking" || speech.status === "paused"
           ? "speaking"
           : "idle";
 
@@ -103,7 +117,7 @@ export default function AssistantChat({ compact = false }) {
           <button
             type="button"
             className="assistant-clear-button"
-            onClick={clearConversation}
+            onClick={handleClearConversation}
             disabled={!messages.length && !error && !pending}
           >
             Clear chat
@@ -151,7 +165,7 @@ export default function AssistantChat({ compact = false }) {
               <div>
                 <button type="button" onClick={retryLastMessage}>Retry</button>
                 <button type="button" onClick={handleEditLastMessage}>Edit question</button>
-                <button type="button" onClick={clearConversation}>Clear chat</button>
+                <button type="button" onClick={handleClearConversation}>Clear chat</button>
               </div>
             </div>
           )}
@@ -160,6 +174,16 @@ export default function AssistantChat({ compact = false }) {
       </div>
 
       <div className="assistant-composer">
+        {liveVoiceOpen && (
+          <LiveVoiceConversation
+            messages={messages}
+            onConversationMessage={appendLiveMessage}
+            onStateChange={handleLiveVoiceStatus}
+            onClose={closeLiveVoice}
+            language={liveLanguage}
+            onLanguageChange={setLiveLanguage}
+          />
+        )}
         {voiceOpen && (
           <VoiceInput
             onSubmit={submitMessage}
@@ -190,6 +214,20 @@ export default function AssistantChat({ compact = false }) {
             disabled={pending || Boolean(error)}
           />
           <div className="assistant-compose-actions">
+            <button
+              type="button"
+              className="assistant-live-toggle"
+              aria-expanded={liveVoiceOpen}
+              onClick={() => {
+                setVoiceOpen(false);
+                speech.stop();
+                if (liveVoiceOpen) closeLiveVoice();
+                else setLiveVoiceOpen(true);
+              }}
+              disabled={pending || Boolean(error)}
+            >
+              {liveVoiceOpen ? "Close live voice" : "Live voice"}
+            </button>
             <button
               type="button"
               className="assistant-microphone-toggle"

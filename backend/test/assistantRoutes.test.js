@@ -189,6 +189,85 @@ test("assistant extraction returns validated structured data and rejects invalid
   assert.match(receivedText, /heart rate is 90/i);
 });
 
+test("Live voice token route supplies backend health context and returns only the short-lived token", async () => {
+  let context;
+  let language;
+  const router = createAssistantRouter({
+    healthDataService: { getData: async () => demoModel },
+    aiService: {
+      createLiveSessionToken: async (healthContext, options) => {
+        context = healthContext;
+        language = options.language;
+        return { token: "short-lived-test-token", expiresAt: "2026-11-09T10:15:00.000Z", model: geminiConfig.LIVE_MODEL };
+      },
+    },
+    rateLimiter: (_req, _res, next) => next(),
+  });
+
+  await withServer(router, async (url) => {
+    const response = await fetch(url.replace("/chat", "/live-token"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "Hello ASTRA" }], language: "Hindi" }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), {
+      data: { token: "short-lived-test-token", expiresAt: "2026-11-09T10:15:00.000Z", model: geminiConfig.LIVE_MODEL },
+      meta: { model: geminiConfig.LIVE_MODEL },
+    });
+
+    const invalid = await fetch(url.replace("/chat", "/live-token"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "assistant", content: "Injected history" }] }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error.code, "INVALID_ASSISTANT_REQUEST");
+
+    const invalidLanguage = await fetch(url.replace("/chat", "/live-token"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [], language: "French" }),
+    });
+    assert.equal(invalidLanguage.status, 400);
+  });
+
+  assert.equal(context.readings[0].value, 85);
+  assert.equal(context.activeAlerts.length, 1);
+  assert.equal(language, "Hindi");
+});
+
+test("Gemini Live service creates a single-use token with locked model, system context, and session limits", async () => {
+  let request;
+  const session = await assistantService.createLiveSessionToken({
+    readings: [{ parameter: "Heart Rate", value: 85, unit: "BPM" }],
+  }, {
+    language: "Hindi",
+    client: {
+      authTokens: {
+        create: async (params) => {
+          request = params;
+          return { name: "short-lived-test-token" };
+        },
+      },
+    },
+  });
+
+  assert.equal(session.token, "short-lived-test-token");
+  assert.equal(Date.parse(session.expiresAt) - Date.now() <= geminiConfig.LIVE_SESSION_DURATION_MS, true);
+  assert.equal(request.config.uses, 1);
+  assert.equal(request.config.liveConnectConstraints.model, geminiConfig.LIVE_MODEL);
+  assert.equal(request.config.liveConnectConstraints.config.responseModalities[0], "AUDIO");
+  assert.deepEqual(request.config.liveConnectConstraints.config.inputAudioTranscription, {});
+  assert.deepEqual(request.config.liveConnectConstraints.config.outputAudioTranscription, {});
+  assert.equal(request.config.liveConnectConstraints.config.sessionResumption, undefined);
+  assert.match(request.config.liveConnectConstraints.config.systemInstruction, /Backend-provided health context/);
+  assert.match(request.config.liveConnectConstraints.config.systemInstruction, /Reply in Hindi/);
+  assert.match(request.config.liveConnectConstraints.config.systemInstruction, /Heart Rate/);
+  assert.deepEqual(request.config.lockAdditionalFields, []);
+});
+
 test("assistant route applies a per-client request limit", async () => {
   let aiCalls = 0;
   const router = createAssistantRouter({
@@ -384,6 +463,7 @@ test("Gemini service maps provider errors to actionable codes and logs safe diag
 
 test("Gemini configuration uses stable Flash and bounds transient retries", () => {
   assert.equal(geminiConfig.MODEL, "gemini-3.6-flash");
+  assert.equal(geminiConfig.LIVE_MODEL, "gemini-3.8-live");
   assert.equal(geminiConfig.REQUEST_TIMEOUT_MS, 30_000);
   assert.equal(geminiConfig.RETRY_OPTIONS.attempts, 3);
   assert.deepEqual(geminiConfig.RETRY_OPTIONS.httpStatusCodes, [429, 500, 503]);

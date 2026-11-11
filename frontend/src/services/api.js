@@ -96,3 +96,8 @@ export const sendAssistantMessage = (messages, options = {}) => request("/assist
   method: "POST",
   body: JSON.stringify({ messages }),
 });
+export const createLiveVoiceSession = (messages, language = "auto", options = {}) => request("/assistant/live-token", {
+  ...options,
+  method: "POST",
+  body: JSON.stringify({ messages, language }),
+});
