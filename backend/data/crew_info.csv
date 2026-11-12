@@ -1,4 +1,4 @@
-Astronaut,Name,Year_of_birth,Year_of_mission,Mission_title,Sex,Current location
+Astronaut id,Name,Year_of_birth,Year_of_mission,Mission_title,Sex,Current location
 AST-001, Soyeon (Lee So-hyun),1978,2008,Soyuz TMA-12 / Soyuz TMA-11,female,Earth
 AST-002, Yang,1978,2012,Shenzhou 9,female,Earth
 AST-003, Aleksandr,1977,2017,53,male,ISS 
