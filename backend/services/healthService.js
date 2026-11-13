@@ -3,6 +3,8 @@ const riskEngine = require("./riskEngine");
 let sourceDataPromise;
 let alertRecords;
 let createdAlertSequence = 0;
+let healthRecords = [];
+let createdHealthRecordSequence = 0;
 const generatedAlertStatuses = new Map();
 
 const loadSourceData = async () => {
@@ -138,6 +140,7 @@ const buildModel = async () => {
       };
     }),
     mission: clone(source.mission),
+    healthRecords: clone(healthRecords),
     alerts: augmentedAlerts,
     healthReadings: crew.flatMap((member) => metricDefinitions.map((metric) => {
       const reading = member.readings[metric.id];
@@ -194,11 +197,75 @@ const createAlert = async (input) => {
     id: `ALT-${Date.now()}-${++createdAlertSequence}`,
     astronautName: member.name,
     status: "New",
-    source: "Simulated alert created by user",
+    source: input.source || "Simulated alert created by user",
     timestamp: new Date().toISOString(),
   };
   alertRecords.unshift(alert);
   return clone(alert);
+};
+
+const createHealthRecord = async (input) => {
+  const source = await loadSourceData();
+  if (!alertRecords) alertRecords = clone(source.alerts);
+  const member = source.crew.find((crewMember) => crewMember.id === input.astronautId);
+  if (!member) return null;
+
+  const existing = healthRecords.find((record) =>
+    record.astronautId === input.astronautId && record.requestId === input.requestId
+  );
+  if (existing) return { record: clone(existing), created: false };
+
+  const recordId = `HR-${Date.now()}-${++createdHealthRecordSequence}`;
+  const assessments = input.measurements.map((measurement) => ({
+    parameter: measurement.parameter,
+    ...riskEngine.assessConfirmedReading(measurement.parameter, measurement.value),
+  }));
+  const record = {
+    id: recordId,
+    requestId: input.requestId,
+    astronautId: member.id,
+    astronautName: member.name,
+    measurements: clone(input.measurements),
+    symptoms: clone(input.symptoms),
+    timestamp: new Date().toISOString(),
+    source: "Crew-confirmed self-report",
+    assessment: assessments,
+    alertIds: [],
+  };
+  healthRecords.unshift(record);
+
+  for (const [index, assessment] of assessments.entries()) {
+    if (!assessment.severity) continue;
+    const measurement = input.measurements[index];
+    const duplicateAlert = alertRecords.find((alert) =>
+      alert.astronautId === member.id
+      && alert.parameter === measurement.parameter
+      && String(alert.value) === String(measurement.value)
+      && alert.unit === measurement.unit
+      && alert.status !== "Resolved"
+    );
+    if (duplicateAlert) {
+      record.alertIds.push(duplicateAlert.id);
+      continue;
+    }
+
+    const alert = {
+      astronautId: member.id,
+      parameter: measurement.parameter,
+      value: measurement.value,
+      unit: measurement.unit,
+      severity: assessment.severity,
+      history: [],
+      message: `Crew-confirmed ${measurement.parameter.toLowerCase()} is outside the configured demonstration band.`,
+      recommendation: assessment.action,
+      sourceRecordId: record.id,
+      source: "Confirmed crew health record",
+    };
+    const created = await createAlert(alert);
+    record.alertIds.push(created.id);
+  }
+
+  return { record: clone(record), created: true };
 };
 
 const resetAlerts = async () => {
@@ -212,6 +279,8 @@ module.exports = {
   getData,
   updateAlertStatus,
   createAlert,
+  createHealthRecord,
+  getHealthRecords: async () => clone(healthRecords),
   resetAlerts,
   metricDefinitions,
 };

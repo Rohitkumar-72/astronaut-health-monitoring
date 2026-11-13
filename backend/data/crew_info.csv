@@ -1,0 +1,18 @@
+Astronaut id,Name,Year_of_birth,Year_of_mission,Mission_title,Sex,Current location
+AST-001, Soyeon (Lee So-hyun),1978,2008,Soyuz TMA-12 / Soyuz TMA-11,female,Earth
+AST-002, Yang,1978,2012,Shenzhou 9,female,Earth
+AST-003, Aleksandr,1977,2017,53,male,ISS 
+AST-004, Luca,1976,2013,36,male,ISS 
+AST-005, Yapi,1980,2013,Shenzhou 10,male,ISS 
+AST-006, Yelena,1976,2014,41,female,ISS 
+AST-007, Samantha,1977,2014,Apollo,female,Moon
+AST-008, Andreas,1976,2015,Soyuz TMA-18M/16M,male,ISS 
+AST-009, Kathleen,1978,2016,48,female,ISS 
+AST-010, Dong,1978,2016,Shenzhou 11,male,ISS 
+AST-011, Thomas,1978,2016,Apollo,male,Moon
+AST-012, Norishige,1976,2017,54,male,ISS 
+AST-013, Anne Charlotte,1979,2018,57,female,Earth
+AST-014, Christina,1979,2019,59,female,Earth
+AST-015, Andrew,1976,2019,Apollo,male,Moon
+AST-016, Jessica,1977,2019,60,female,ISS 
+AST-017, Hazzaa,1983,2019,EP-19,male,ISS 

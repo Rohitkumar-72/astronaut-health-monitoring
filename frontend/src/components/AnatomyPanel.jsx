@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import RiskBadge from "./RiskBadge";
 
 const BODY_REGIONS = [
@@ -12,9 +12,6 @@ const BODY_REGIONS = [
   { id: "arms", label: "Arms" },
   { id: "legs", label: "Legs" },
 ];
-
-const SKIN_BASE_COLOR = new THREE.Color("#9e755c");
-const MODESTY_GARMENT_COLOR = new THREE.Color("#263953");
 
 const REGION_METRICS = {
   overview: [
@@ -32,185 +29,63 @@ const REGION_METRICS = {
   legs: ["Physical Activity"],
 };
 
-const REGION_INDEX = new Map(BODY_REGIONS.map(({ id }, index) => [id, index]));
+const REGION_SYSTEMS = {
+  overview: ["All systems context"],
+  head: ["Nervous system"],
+  chest: ["Cardiovascular system", "Respiratory system"],
+  abdomen: ["Digestive system"],
+  arms: ["Muscular system", "Skeletal system"],
+  legs: ["Skeletal system", "Muscular system"],
+};
 
-function classifyBodyRegion(x, z, bounds) {
-  const height = bounds.max.z - bounds.min.z;
+const REGION_DESCRIPTIONS = {
+  overview: "A broad view of the astronaut suit and the available crew measurements.",
+  head: "Sleep and stress readings are shown here as crew-wide indicators, not head or brain measurements.",
+  chest: "Cardiovascular and oxygen readings are associated with this approximate surface zone.",
+  abdomen: "Temperature readings are associated with this approximate surface zone.",
+  arms: "Activity readings provide crew context for this approximate surface zone.",
+  legs: "Activity readings provide crew context for this approximate surface zone.",
+};
+
+const SYSTEM_NAVIGATION = [
+  { label: "Cardiovascular", region: "chest" },
+  { label: "Respiratory", region: "chest" },
+  { label: "Skeletal", region: "legs" },
+  { label: "Muscular", region: "arms" },
+  { label: "Nervous", region: "head" },
+  { label: "Digestive", region: "abdomen" },
+  { label: "Skin surface", region: "overview" },
+];
+
+function classifyBodyRegion(name = "") {
+  const normalized = name.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized.includes("lifesupport")) return "chest";
+  if (normalized.includes("feet") || normalized.includes("legs")) return "legs";
+  if (normalized.includes("head")) return "head";
+  if (normalized.includes("body")) return "chest";
+  return "overview";
+}
+
+function classifyBodyPoint(point, bounds) {
+  const height = bounds.max.y - bounds.min.y;
   const width = bounds.max.x - bounds.min.x;
-  const heightPosition = (z - bounds.min.z) / height;
-  const distanceFromCenter = Math.abs(x - (bounds.min.x + bounds.max.x) / 2);
+  const heightPosition = (point.y - bounds.min.y) / height;
+  const distanceFromCenter = Math.abs(point.x - (bounds.min.x + bounds.max.x) / 2);
 
-  if (heightPosition > 0.82) return "head";
-  if (heightPosition < 0.48) return "legs";
-  if (heightPosition < 0.82 && distanceFromCenter > width * 0.29) return "arms";
-  if (heightPosition > 0.58) return "chest";
+  if (heightPosition > 0.81) return "head";
+  if (heightPosition < 0.43) return "legs";
+  if (heightPosition < 0.81 && distanceFromCenter > width * 0.25) return "arms";
+  if (heightPosition > 0.56) return "chest";
   return "abdomen";
 }
 
-function smoothstep(edge0, edge1, value) {
-  const amount = THREE.MathUtils.clamp((value - edge0) / (edge1 - edge0), 0, 1);
-  return amount * amount * (3 - 2 * amount);
-}
-
-function modestyGarmentCoverage(x, z, bounds) {
-  const height = bounds.max.z - bounds.min.z;
-  const heightFraction = (z - bounds.min.z) / height;
-  const centerX = (bounds.min.x + bounds.max.x) / 2;
-  const lateralDistance = Math.abs(x - centerX);
-  const normalizedX = lateralDistance / 165;
-  const top = 0.58 - Math.min(normalizedX, 1) * 0.015;
-  const bottom = 0.39 + Math.min(normalizedX, 1) * 0.035;
-  const verticalCoverage = smoothstep(bottom - 0.012, bottom + 0.012, heightFraction)
-    * (1 - smoothstep(top - 0.012, top + 0.012, heightFraction));
-  const lateralCoverage = 1 - smoothstep(145, 165, lateralDistance);
-
-  return verticalCoverage * lateralCoverage;
-}
-
-function concealExternalDetail(x, depth, z) {
-  if (depth > -145) return depth;
-
-  const lateralBlend = 1 - smoothstep(48, 82, Math.abs(x));
-  const upperBlend = smoothstep(735, 775, z);
-  const lowerBlend = 1 - smoothstep(850, 890, z);
-  const frontBlend = 1 - smoothstep(-188, -148, depth);
-  const amount = lateralBlend * upperBlend * lowerBlend * frontBlend;
-  const smoothContour = -145;
-
-  return THREE.MathUtils.lerp(depth, smoothContour, amount);
-}
-
-function getSkinVariation(x, y, z, normalZ) {
-  const surfaceLighting = 1 + THREE.MathUtils.clamp(normalZ, 0, 1) * 0.018;
-  return (0.975
-    + Math.sin(x * 0.031 + z * 0.017) * 0.012
-    + Math.sin(y * 0.027 - z * 0.023) * 0.009
-    + Math.sin(x * 0.013 + y * 0.019 + z * 0.009) * 0.008) * surfaceLighting;
-}
-
-function createRegionMeshes(sourceGeometry, bounds) {
-  if (!sourceGeometry.getAttribute("normal")) sourceGeometry.computeVertexNormals();
-  const isIndexed = Boolean(sourceGeometry.index);
-  const geometry = isIndexed ? sourceGeometry.toNonIndexed() : sourceGeometry;
-  const positions = geometry.getAttribute("position");
-
-  if (!positions || positions.count < 3) {
-    if (isIndexed) geometry.dispose();
-    throw new Error("The anatomy model does not contain a usable surface mesh.");
-  }
-
-  const normals = geometry.getAttribute("normal");
-  const uvs = geometry.getAttribute("uv");
-  const triangleCount = Math.floor(positions.count / 3);
-  const surfaceByTriangle = new Uint8Array(triangleCount);
-  const vertexCounts = new Uint32Array(BODY_REGIONS.length);
-  const center = bounds.getCenter(new THREE.Vector3());
-  const scale = 3.5 / (bounds.max.z - bounds.min.z);
-
-  for (let triangle = 0; triangle < triangleCount; triangle += 1) {
-    const offset = triangle * 3;
-    const x = (positions.getX(offset) + positions.getX(offset + 1) + positions.getX(offset + 2)) / 3;
-    const z = (positions.getZ(offset) + positions.getZ(offset + 1) + positions.getZ(offset + 2)) / 3;
-    const region = REGION_INDEX.get(classifyBodyRegion(x, z, bounds));
-    surfaceByTriangle[triangle] = region;
-    vertexCounts[region] += 3;
-  }
-
-  const regionBuffers = BODY_REGIONS.map((_, region) => ({
-    positions: new Float32Array(vertexCounts[region] * 3),
-    normals: normals ? new Float32Array(vertexCounts[region] * 3) : null,
-    uvs: uvs ? new Float32Array(vertexCounts[region] * 2) : null,
-    colors: new Float32Array(vertexCounts[region] * 3),
-    offset: 0,
-  }));
-
-  for (let triangle = 0; triangle < triangleCount; triangle += 1) {
-    const sourceOffset = triangle * 3;
-    const surface = surfaceByTriangle[triangle];
-    const buffer = regionBuffers[surface];
-
-    for (let vertex = 0; vertex < 3; vertex += 1) {
-      const sourceIndex = sourceOffset + vertex;
-      const targetOffset = buffer.offset;
-      const sourceX = positions.getX(sourceIndex);
-      const sourceY = positions.getY(sourceIndex);
-      const sourceZ = positions.getZ(sourceIndex);
-      const adjustedY = concealExternalDetail(sourceX, sourceY, sourceZ);
-      buffer.positions[targetOffset] = (sourceX - center.x) * scale;
-      buffer.positions[targetOffset + 1] = (adjustedY - center.y) * scale;
-      buffer.positions[targetOffset + 2] = (positions.getZ(sourceIndex) - center.z) * scale;
-
-      if (normals) {
-        buffer.normals[targetOffset] = normals.getX(sourceIndex);
-        buffer.normals[targetOffset + 1] = normals.getY(sourceIndex);
-        buffer.normals[targetOffset + 2] = normals.getZ(sourceIndex);
-      }
-
-      if (uvs) {
-        const uvOffset = (targetOffset / 3) * 2;
-        buffer.uvs[uvOffset] = uvs.getX(sourceIndex);
-        buffer.uvs[uvOffset + 1] = uvs.getY(sourceIndex);
-      }
-
-      const variation = getSkinVariation(
-        sourceX,
-        sourceY,
-        sourceZ,
-        normals ? normals.getZ(sourceIndex) : 0
-      );
-      const garmentCoverage = modestyGarmentCoverage(sourceX, sourceZ, bounds);
-      buffer.colors[targetOffset] = THREE.MathUtils.lerp(
-        SKIN_BASE_COLOR.r * variation,
-        MODESTY_GARMENT_COLOR.r,
-        garmentCoverage
-      );
-      buffer.colors[targetOffset + 1] = THREE.MathUtils.lerp(
-        SKIN_BASE_COLOR.g * variation,
-        MODESTY_GARMENT_COLOR.g,
-        garmentCoverage
-      );
-      buffer.colors[targetOffset + 2] = THREE.MathUtils.lerp(
-        SKIN_BASE_COLOR.b * variation,
-        MODESTY_GARMENT_COLOR.b,
-        garmentCoverage
-      );
-
-      buffer.offset += 3;
-    }
-  }
-
-  if (isIndexed) geometry.dispose();
-
-  return regionBuffers.flatMap((buffer, surface) => {
-    if (buffer.offset === 0) return [];
-
-    const regionGeometry = new THREE.BufferGeometry();
-    regionGeometry.setAttribute("position", new THREE.BufferAttribute(buffer.positions, 3));
-    if (buffer.normals) {
-      regionGeometry.setAttribute("normal", new THREE.BufferAttribute(buffer.normals, 3));
-    } else {
-      regionGeometry.computeVertexNormals();
-    }
-    if (buffer.uvs) regionGeometry.setAttribute("uv", new THREE.BufferAttribute(buffer.uvs, 2));
-    if (buffer.colors) regionGeometry.setAttribute("color", new THREE.BufferAttribute(buffer.colors, 3));
-    regionGeometry.computeBoundingSphere();
-
-    const material = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
-      vertexColors: true,
-      roughness: 0.82,
-      metalness: 0,
-      clearcoat: 0.025,
-      clearcoatRoughness: 0.9,
-      emissive: 0x49e4d0,
-      emissiveIntensity: 0,
-    });
-    const mesh = new THREE.Mesh(regionGeometry, material);
-    mesh.userData.region = BODY_REGIONS[surface].id;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    return [{ mesh, material, region: mesh.userData.region }];
-  });
+function formatBodyPartName(name = "") {
+  if (name.includes("LifeSupport")) return "Life-support backpack";
+  if (name.includes("Head")) return "Helmet";
+  if (name.includes("Feet")) return "Boots";
+  if (name.includes("Legs")) return "Leg suit";
+  if (name.includes("Body")) return "Torso and arm suit";
+  return "Suit detail";
 }
 
 function latestByParameter(readings) {
@@ -233,23 +108,37 @@ function formatTimestamp(timestamp) {
 export default function AnatomyPanel({ readings }) {
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
-  const regionMaterialsRef = useRef(new Map());
+  const selectableMeshesRef = useRef([]);
   const [renderState, setRenderState] = useState("loading");
   const [loadError, setLoadError] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("overview");
+  const [selectedSystem, setSelectedSystem] = useState(null);
+  const [selectedPart, setSelectedPart] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const readingByParameter = latestByParameter(readings);
   const regionLabel = BODY_REGIONS.find(({ id }) => id === selectedRegion)?.label || "Overview";
+  const selectedLabel = selectedPart?.label || regionLabel;
+  const regionSystems = REGION_SYSTEMS[selectedRegion] || REGION_SYSTEMS.overview;
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const visibleRegions = BODY_REGIONS.filter(({ label }) => label.toLowerCase().includes(normalizedSearch));
+  const visibleSystems = SYSTEM_NAVIGATION.filter(({ label }) => label.toLowerCase().includes(normalizedSearch));
   const selectedReadings = (REGION_METRICS[selectedRegion] || [])
     .map((parameter) => readingByParameter.get(parameter))
     .filter(Boolean);
 
   useEffect(() => {
-    for (const [region, materials] of regionMaterialsRef.current) {
-      for (const material of materials) {
-        material.emissiveIntensity = region === selectedRegion ? 0.14 : 0;
+    for (const entry of selectableMeshesRef.current) {
+      const selected = selectedPart
+        ? entry.mesh.uuid === selectedPart.id
+        : selectedRegion === "overview"
+          || entry.region === selectedRegion
+          || (entry.region === "chest" && ["arms", "abdomen"].includes(selectedRegion));
+      for (const material of entry.materials) {
+        material.emissive.set(selected ? 0x197e8a : 0x000000);
+        material.emissiveIntensity = selected ? (selectedPart ? 0.42 : 0.16) : 0;
       }
     }
-  }, [renderState, selectedRegion]);
+  }, [renderState, selectedPart, selectedRegion]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -267,7 +156,7 @@ export default function AnatomyPanel({ readings }) {
     let contextLost = false;
     let pointerDown;
     const materials = new Set();
-    const regionMaterials = new Map();
+    const selectableMeshes = [];
 
     const releaseModel = (model) => {
       model.traverse((object) => {
@@ -295,47 +184,34 @@ export default function AnatomyPanel({ readings }) {
       renderer.setClearColor(0x000000, 0);
       renderer.domElement.setAttribute(
         "aria-label",
-        "Interactive 3D BodyParts3D skin model. Click or tap a body region to select it; drag to rotate."
+        "Interactive 3D astronaut spacesuit. Click or tap a suit mesh to select it; drag to rotate."
       );
       renderer.domElement.setAttribute("role", "img");
       mount.appendChild(renderer.domElement);
 
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.VSMShadowMap;
-      scene.add(new THREE.HemisphereLight(0xf5ebdf, 0x243048, 1.2));
-      const keyLight = new THREE.DirectionalLight(0xfff4e9, 1.7);
-      keyLight.position.set(-2, 4, 5);
-      keyLight.castShadow = true;
-      keyLight.shadow.mapSize.set(1024, 1024);
-      keyLight.shadow.camera.near = 0.5;
-      keyLight.shadow.camera.far = 12;
-      keyLight.shadow.camera.left = -3;
-      keyLight.shadow.camera.right = 3;
-      keyLight.shadow.camera.top = 4;
-      keyLight.shadow.camera.bottom = -3;
-      keyLight.shadow.radius = 5;
-      keyLight.shadow.blurSamples = 8;
+      scene.add(new THREE.HemisphereLight(0xffeee0, 0x24243c, 1.55));
+      const keyLight = new THREE.DirectionalLight(0xffead8, 2.2);
+      keyLight.position.set(-2.2, 3.5, 4.5);
       scene.add(keyLight);
-      const rimLight = new THREE.DirectionalLight(0x49e4d0, 0.58);
-      rimLight.position.set(3, 1, -3);
+      const rimLight = new THREE.DirectionalLight(0x9c83ff, 1.05);
+      rimLight.position.set(3, 2, -3);
       scene.add(rimLight);
-      const fillLight = new THREE.DirectionalLight(0x8d9fff, 0.52);
+      const fillLight = new THREE.DirectionalLight(0x84caff, 0.78);
       fillLight.position.set(-4, -2, 3);
       scene.add(fillLight);
 
       floor = new THREE.Mesh(
         new THREE.PlaneGeometry(5, 5),
-        new THREE.ShadowMaterial({ color: 0x020712, opacity: 0.3 })
+        new THREE.MeshBasicMaterial({ color: 0x08101f, transparent: true, opacity: 0.32 })
       );
       floor.rotation.x = -Math.PI / 2;
       floor.position.y = -1.78;
-      floor.receiveShadow = true;
       scene.add(floor);
 
       controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
-      controls.minDistance = 4;
+      controls.minDistance = 3;
       controls.maxDistance = 9;
       controls.target.set(0, 0, 0);
       controlsRef.current = controls;
@@ -362,6 +238,9 @@ export default function AnatomyPanel({ readings }) {
           pointerDown.moved = true;
         }
       };
+      const onPointerCancel = () => {
+        pointerDown = undefined;
+      };
       const onPointerUp = (event) => {
         if (!pointerDown?.moved && body) {
           const bounds = renderer.domElement.getBoundingClientRect();
@@ -370,8 +249,17 @@ export default function AnatomyPanel({ readings }) {
             -((event.clientY - bounds.top) / bounds.height) * 2 + 1
           );
           raycaster.setFromCamera(pointer, camera);
-          const hit = raycaster.intersectObjects(body.children, false)[0];
-          if (hit?.object.userData.region) setSelectedRegion(hit.object.userData.region);
+          const hit = raycaster.intersectObjects(body.children, true)[0];
+          if (hit?.object.userData.region) {
+            const region = classifyBodyPoint(hit.point, body.userData.bounds);
+            const regionName = BODY_REGIONS.find((item) => item.id === region)?.label || "Body";
+            setSelectedRegion(region);
+            setSelectedPart({
+              id: hit.object.uuid,
+              label: `${regionName} · ${hit.object.userData.bodyPart}`,
+            });
+            setSelectedSystem(null);
+          }
         }
         pointerDown = undefined;
       };
@@ -385,7 +273,7 @@ export default function AnatomyPanel({ readings }) {
       renderer.domElement.addEventListener("pointerdown", onPointerDown);
       renderer.domElement.addEventListener("pointermove", onPointerMove);
       renderer.domElement.addEventListener("pointerup", onPointerUp);
-      renderer.domElement.addEventListener("pointercancel", onPointerUp);
+      renderer.domElement.addEventListener("pointercancel", onPointerCancel);
       renderer.domElement.addEventListener("webglcontextlost", onContextLost);
 
       const render = () => {
@@ -396,10 +284,11 @@ export default function AnatomyPanel({ readings }) {
       };
       animationFrame = window.requestAnimationFrame(render);
 
-      const loader = new OBJLoader();
+      const loader = new GLTFLoader();
       modelRequest = loader.load(
-        "/models/bodyparts3d-skin.obj",
-        (model) => {
+        "/models/astronaut-spacesuit.glb",
+        (gltf) => {
+          const model = gltf.scene;
           if (disposed) {
             releaseModel(model);
             return;
@@ -408,35 +297,132 @@ export default function AnatomyPanel({ readings }) {
           try {
             model.updateMatrixWorld(true);
             const bounds = new THREE.Box3().setFromObject(model);
-            if (bounds.isEmpty() || bounds.max.z <= bounds.min.z) {
+            if (bounds.isEmpty() || bounds.max.y <= bounds.min.y) {
               throw new Error("The local model has invalid anatomical bounds.");
             }
 
+            const center = bounds.getCenter(new THREE.Vector3());
+            const size = bounds.getSize(new THREE.Vector3());
+            const scale = 3.1 / size.y;
+            const packWidth = size.x * 0.28;
+            const packHeight = size.y * 0.23;
+            const packDepth = Math.max(size.z * 0.4, 0.14);
+            const packCenter = new THREE.Vector3(
+              center.x,
+              center.y + size.y * 0.18,
+              center.z - size.z * 0.5
+            );
+            const shellMaterial = new THREE.MeshStandardMaterial({
+              color: "#91a6bb",
+              metalness: 0.42,
+              roughness: 0.48,
+            });
+            shellMaterial.name = "SciFi_Main";
+            const tankMaterial = new THREE.MeshStandardMaterial({
+              color: "#183353",
+              metalness: 0.34,
+              roughness: 0.52,
+            });
+            tankMaterial.name = "SciFi_MainDark";
+            const panelMaterial = new THREE.MeshStandardMaterial({
+              color: "#10243d",
+              metalness: 0.25,
+              roughness: 0.4,
+            });
+            panelMaterial.name = "Grey";
+            const accentMaterial = new THREE.MeshStandardMaterial({
+              color: "#36d5f2",
+              metalness: 0.28,
+              roughness: 0.38,
+            });
+            accentMaterial.name = "SciFi_Light_Accent";
+            for (const material of [shellMaterial, tankMaterial, panelMaterial, accentMaterial]) {
+              materials.add(material);
+            }
+            const addPackPart = (part, geometry, material, position) => {
+              const mesh = new THREE.Mesh(geometry, material);
+              mesh.name = `SpaceSuit_LifeSupport_${part}`;
+              mesh.position.copy(position);
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+              model.add(mesh);
+            };
+            addPackPart(
+              "Shell",
+              new THREE.BoxGeometry(packWidth, packHeight, packDepth),
+              shellMaterial,
+              packCenter
+            );
+            for (const side of [-1, 1]) {
+              addPackPart(
+                `Tank_${side}`,
+                new THREE.CylinderGeometry(packWidth * 0.1, packWidth * 0.1, packHeight * 0.84, 8),
+                tankMaterial,
+                new THREE.Vector3(
+                  packCenter.x + side * packWidth * 0.42,
+                  packCenter.y,
+                  packCenter.z
+                )
+              );
+            }
+            const rearPanelZ = packCenter.z - packDepth * 0.5 - 0.008;
+            addPackPart(
+              "ControlPanel",
+              new THREE.BoxGeometry(packWidth * 0.58, packHeight * 0.3, 0.018),
+              panelMaterial,
+              new THREE.Vector3(packCenter.x, packCenter.y + packHeight * 0.17, rearPanelZ)
+            );
+            addPackPart(
+              "PanelAccent",
+              new THREE.BoxGeometry(packWidth * 0.28, packHeight * 0.045, 0.012),
+              accentMaterial,
+              new THREE.Vector3(packCenter.x, packCenter.y + packHeight * 0.17, rearPanelZ - 0.015)
+            );
+            model.scale.setScalar(scale);
+            model.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
             body = new THREE.Group();
-            body.rotation.x = -Math.PI / 2;
+            body.userData.bounds = new THREE.Box3(
+              bounds.min.clone().multiplyScalar(scale).sub(center.clone().multiplyScalar(scale)),
+              bounds.max.clone().multiplyScalar(scale).sub(center.clone().multiplyScalar(scale))
+            );
             model.traverse((object) => {
               if (!object.isMesh) return;
-              const sections = createRegionMeshes(object.geometry, bounds);
-              for (const { mesh, material, region } of sections) {
-                body.add(mesh);
-                materials.add(material);
-                const regionMaterialsList = regionMaterials.get(region) || [];
-                regionMaterialsList.push(material);
-                regionMaterials.set(region, regionMaterialsList);
-              }
-              object.geometry.dispose();
-              if (object.material) {
-                const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
-                objectMaterials.forEach((material) => material.dispose());
-              }
+              const originalMaterials = object.material
+                ? (Array.isArray(object.material) ? object.material : [object.material])
+                : [new THREE.MeshStandardMaterial()];
+              const meshMaterials = originalMaterials.map((material) => {
+                const meshMaterial = material.clone();
+                const materialName = material.name.toLowerCase();
+                if (materialName.includes("light_accent")) meshMaterial.color.set("#36d5f2");
+                else if (materialName.includes("maindark")) meshMaterial.color.set("#183353");
+                else if (materialName === "grey") meshMaterial.color.set("#10243d");
+                else if (materialName.includes("main")) meshMaterial.color.set("#8299b2");
+                else meshMaterial.color.set("#edf2f8");
+                meshMaterial.emissive?.set(0x000000);
+                meshMaterial.emissiveIntensity = 0;
+                meshMaterial.needsUpdate = true;
+                materials.add(meshMaterial);
+                return meshMaterial;
+              });
+              object.material = Array.isArray(object.material) ? meshMaterials : meshMaterials[0];
+              object.userData.region = classifyBodyRegion(object.name);
+              object.userData.bodyPart = formatBodyPartName(object.name);
+              object.castShadow = false;
+              object.receiveShadow = true;
+              selectableMeshes.push({
+                mesh: object,
+                materials: meshMaterials,
+                region: object.userData.region,
+              });
             });
 
-            if (body.children.length === 0) {
-              throw new Error("No renderable skin surface was found in the local model.");
+            if (selectableMeshes.length === 0) {
+              throw new Error("No separately selectable body-region meshes were found in the local model.");
             }
 
+            body.add(model);
             scene.add(body);
-            regionMaterialsRef.current = regionMaterials;
+            selectableMeshesRef.current = selectableMeshes;
             controlsRef.current = {
               reset() {
                 controls.reset();
@@ -451,7 +437,7 @@ export default function AnatomyPanel({ readings }) {
             };
             setRenderState("ready");
           } catch (error) {
-            console.error("The local BodyParts3D skin model could not be prepared.", error);
+            console.error("The local Quaternius spacesuit model could not be prepared.", error);
             if (body) {
               scene.remove(body);
               releaseModel(body);
@@ -459,9 +445,9 @@ export default function AnatomyPanel({ readings }) {
             }
             for (const material of materials) material.dispose();
             materials.clear();
-            regionMaterials.clear();
-            regionMaterialsRef.current = new Map();
-            setLoadError("The local BodyParts3D model could not be prepared for display.");
+            selectableMeshes.length = 0;
+            selectableMeshesRef.current = [];
+            setLoadError("The local astronaut spacesuit model could not be prepared for display.");
             setRenderState("unavailable");
             releaseModel(model);
           }
@@ -469,8 +455,8 @@ export default function AnatomyPanel({ readings }) {
         undefined,
         (error) => {
           if (disposed) return;
-          console.error("The local BodyParts3D skin model could not be loaded.", error);
-          setLoadError("The local BodyParts3D model could not be loaded. Check the local model asset and try again.");
+          console.error("The local Quaternius spacesuit model could not be loaded.", error);
+          setLoadError("The local astronaut spacesuit model could not be loaded. Check the local model asset and try again.");
           setRenderState("unavailable");
         }
       );
@@ -484,7 +470,7 @@ export default function AnatomyPanel({ readings }) {
         renderer.domElement.removeEventListener("pointerdown", onPointerDown);
         renderer.domElement.removeEventListener("pointermove", onPointerMove);
         renderer.domElement.removeEventListener("pointerup", onPointerUp);
-        renderer.domElement.removeEventListener("pointercancel", onPointerUp);
+        renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
         renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
         if (body) releaseModel(body);
         floor?.geometry.dispose();
@@ -493,7 +479,7 @@ export default function AnatomyPanel({ readings }) {
         renderer.dispose();
         renderer.domElement.remove();
         controlsRef.current = null;
-        regionMaterialsRef.current = new Map();
+        selectableMeshesRef.current = [];
       };
     } catch (error) {
       console.error("The interactive anatomy viewer could not be initialized.", error);
@@ -515,7 +501,7 @@ export default function AnatomyPanel({ readings }) {
         floor?.material.dispose();
         for (const material of materials) material.dispose();
         controlsRef.current = null;
-        regionMaterialsRef.current = new Map();
+        selectableMeshesRef.current = [];
       };
     }
   }, []);
@@ -523,111 +509,193 @@ export default function AnatomyPanel({ readings }) {
   const isUnavailable = renderState === "unavailable";
 
   return (
-    <section className="app-panel dashboard-anatomy-panel" id="body-explorer">
-      <div className="dashboard-section-heading anatomy-heading">
+    <section className="anatomy-explorer-card" id="body-explorer">
+      <header className="anatomy-workspace-header">
         <div>
-          <span className="dashboard-section-kicker">INTERACTIVE ANATOMY</span>
-          <h2>Human body regions</h2>
-          <p>Click or tap the model or use the region controls to view available sample readings.</p>
+          <span className="anatomy-workspace-kicker">ASTRA EXTRAVEHICULAR SUIT</span>
+          <h2>3D astronaut exploration</h2>
+          <p>Select a suit region to review related readings. Drag to rotate and zoom.</p>
         </div>
-        <span className="anatomy-model-label">BODY PARTS 3D · LICENSED SKIN SURFACE</span>
-      </div>
-      <div className={`anatomy-stage${isUnavailable ? " is-unavailable" : ""}`}>
-        <div ref={mountRef} className="anatomy-canvas" />
-        {renderState === "loading" && (
-          <div className="anatomy-loading" role="status">Loading local BodyParts3D skin model…</div>
-        )}
-        {isUnavailable && (
-          <div className="anatomy-error" role="alert">
-            <strong>Interactive 3D model unavailable</strong>
-            <span>{loadError || "The local anatomy model could not be shown."}</span>
+        <span className="anatomy-model-label">QUATERNIUS SPACESUIT · CC0</span>
+      </header>
+
+      <div className="anatomy-workspace-grid">
+        <aside className="anatomy-region-panel" aria-label="Body region navigation">
+          <div className="anatomy-panel-heading">
+            <span>REGION NAVIGATION</span>
+            <strong>Explore by region</strong>
           </div>
-        )}
-        {renderState === "ready" && (
-          <div className="anatomy-stage-note">Drag to rotate · Scroll or pinch to zoom · Select a colored region</div>
-        )}
-      </div>
-      <div className="anatomy-control-row">
-        <div className="anatomy-region-controls" role="group" aria-label="Select a body region">
-          {BODY_REGIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              className={selectedRegion === id ? "is-selected" : ""}
-              aria-pressed={selectedRegion === id}
-              onClick={() => setSelectedRegion(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="anatomy-zoom-controls" role="group" aria-label="3D view controls">
-          <button
-            type="button"
-            aria-label="Zoom out"
-            disabled={isUnavailable}
-            onClick={() => controlsRef.current?.zoom(1.12)}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            aria-label="Zoom in"
-            disabled={isUnavailable}
-            onClick={() => controlsRef.current?.zoom(0.89)}
-          >
-            +
-          </button>
-          <button type="button" disabled={isUnavailable} onClick={() => controlsRef.current?.reset()}>
-            Reset view
-          </button>
-        </div>
-      </div>
-      <div className="anatomy-measurement">
-        <div className="anatomy-measurement-heading">
-          <div>
-            <span className="dashboard-trend-kicker">AVAILABLE SAMPLE DATA</span>
-            <h3>{regionLabel} readings</h3>
-          </div>
-          <span className="anatomy-reading-count">
-            {selectedReadings.length} indicator{selectedReadings.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {selectedReadings.length > 0 ? (
-          <div className="anatomy-reading-grid">
-            {selectedReadings.map((reading) => (
-              <article className="anatomy-reading-card" key={reading.parameter}>
-                <div className="anatomy-reading-heading">
-                  <strong>{reading.parameter}</strong>
-                  {reading.severity && (
-                    <RiskBadge severity={reading.severity} status={reading.status} />
-                  )}
-                </div>
-                <strong className="anatomy-reading-value">
-                  {reading.value} <small>{reading.unit || "Unit unavailable"}</small>
-                </strong>
-                <span>{reading.astronautName || "Crew member unavailable"}</span>
-                <time dateTime={reading.timestamp || undefined}>{formatTimestamp(reading.timestamp)}</time>
-                {reading.message && <p>{reading.message}</p>}
-              </article>
+          <label className="anatomy-search">
+            <span>Search body region</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="e.g. chest, arm, foot"
+              aria-label="Search body regions and systems"
+            />
+          </label>
+          <div className="anatomy-region-controls" role="group" aria-label="Select a body region">
+            {visibleRegions.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                className={selectedRegion === id ? "is-selected" : ""}
+                aria-pressed={selectedRegion === id}
+                onClick={() => {
+                  setSelectedRegion(id);
+                  setSelectedSystem(null);
+                  setSelectedPart(null);
+                }}
+              >
+                <span>{String(BODY_REGIONS.findIndex((region) => region.id === id) + 1).padStart(2, "0")}</span>
+                {label}
+              </button>
             ))}
+            {visibleRegions.length === 0 && visibleSystems.length === 0 && (
+              <p className="anatomy-search-empty">No regions or systems match this search.</p>
+            )}
           </div>
-        ) : (
-          <p className="dashboard-no-data">
-            No matching health readings are available for this region in the current dataset.
+          <div className="anatomy-system-navigation">
+            <span>BODY SYSTEM CATEGORIES</span>
+            <div role="group" aria-label="Explore a body system surface context">
+              {visibleSystems.map(({ label, region }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={selectedSystem === label}
+                  onClick={() => {
+                    setSelectedRegion(region);
+                    setSelectedSystem(label);
+                    setSelectedPart(null);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <small>System labels select a related exterior region; internal organs are not included.</small>
+          </div>
+          <div className="anatomy-scope-note">
+            <span className="anatomy-scope-icon" aria-hidden="true">i</span>
+            <p>The suit has four named meshes and a modeled life-support pack. Highlights cover whole meshes; arm and abdominal zones are approximate, and internal organs are not modeled.</p>
+          </div>
+        </aside>
+
+        <div className="anatomy-view-column">
+          <div className="anatomy-view-toolbar">
+            <div>
+              <span>SELECTED BODY PART</span>
+              <strong>{selectedLabel}</strong>
+            </div>
+            <div className="anatomy-zoom-controls" role="group" aria-label="3D view controls">
+              <button
+                type="button"
+                aria-label="Zoom out"
+                disabled={isUnavailable}
+                onClick={() => controlsRef.current?.zoom(1.12)}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                aria-label="Zoom in"
+                disabled={isUnavailable}
+                onClick={() => controlsRef.current?.zoom(0.89)}
+              >
+                +
+              </button>
+              <button type="button" disabled={isUnavailable} onClick={() => controlsRef.current?.reset()}>
+                Reset view
+              </button>
+            </div>
+          </div>
+          <div className={`anatomy-stage${isUnavailable ? " is-unavailable" : ""}`}>
+            <div ref={mountRef} className="anatomy-canvas" />
+            {renderState === "loading" && (
+              <div className="anatomy-loading" role="status">Loading local 3D astronaut spacesuit…</div>
+            )}
+            {isUnavailable && (
+              <div className="anatomy-error" role="alert">
+                <strong>Interactive 3D model unavailable</strong>
+                <span>{loadError || "The local anatomy model could not be shown."}</span>
+              </div>
+            )}
+            {renderState === "ready" && (
+              <div className="anatomy-stage-note">Drag to rotate · Scroll or pinch to zoom · Tap a suit region to select it</div>
+            )}
+          </div>
+          <div className="anatomy-view-footer">
+            <span>ROTATABLE SURFACE VIEW</span>
+            <span>Selection: {selectedLabel}</span>
+          </div>
+        </div>
+
+        <aside className="anatomy-details-panel" aria-live="polite">
+          <div className="anatomy-panel-heading">
+            <span>SELECTED BODY PART</span>
+            <strong>{selectedLabel}</strong>
+          </div>
+          <p className="anatomy-region-description">
+            {selectedPart
+              ? `${selectedPart.label} selected. Related health readings are shown for the broader ${regionLabel.toLowerCase()} region.`
+              : REGION_DESCRIPTIONS[selectedRegion] || REGION_DESCRIPTIONS.overview}
           </p>
-        )}
-        <p className="anatomy-disclaimer">
-          These broad surface regions are approximate hit zones, not separate organ meshes. Sample alerts can refer to different crew members and are not diagnostic.
-          {" "}
-          <a
-            href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            BodyParts3D skin model · CC BY 4.0
-          </a>
-        </p>
+          <div className="anatomy-system-context">
+            <span>RELATED SYSTEM CONTEXT</span>
+            <div>{regionSystems.map((system) => <span key={system}>{system}</span>)}</div>
+          </div>
+          <div className="anatomy-measurement">
+            <div className="anatomy-measurement-heading">
+              <div>
+                <span className="dashboard-trend-kicker">BACKEND DEMONSTRATION DATA</span>
+                <h3>Related readings</h3>
+              </div>
+              <span className="anatomy-reading-count">
+                {selectedReadings.length} indicator{selectedReadings.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {selectedReadings.length > 0 ? (
+              <div className="anatomy-reading-grid">
+                {selectedReadings.map((reading) => (
+                  <article className="anatomy-reading-card" key={reading.parameter}>
+                    <div className="anatomy-reading-heading">
+                      <strong>{reading.parameter}</strong>
+                      {reading.severity && (
+                        <RiskBadge severity={reading.severity} status={reading.status} />
+                      )}
+                    </div>
+                    <strong className="anatomy-reading-value">
+                      {reading.value} <small>{reading.unit || "Unit unavailable"}</small>
+                    </strong>
+                    <span>{reading.astronautName || "Crew member unavailable"}</span>
+                    <time dateTime={reading.timestamp || undefined}>{formatTimestamp(reading.timestamp)}</time>
+                    {reading.message && <p>{reading.message}</p>}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="dashboard-no-data">
+                No matching health readings are available for this region in the current dataset.
+              </p>
+            )}
+          </div>
+          <div className="anatomy-preventive-note">
+            <span>PREVENTIVE GUIDANCE</span>
+            <p>No region-specific recommendations are provided in the current data.</p>
+          </div>
+          <p className="anatomy-disclaimer">
+            Suit regions provide crew-health context and do not represent independently selectable organs. Readings are not diagnostic.
+            {" "}
+            <a
+              href="https://quaternius.com/packs/ultimatemodularcharacters.html"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Quaternius spacesuit · CC0
+            </a>
+          </p>
+        </aside>
       </div>
     </section>
   );

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
+import AssistantFloatingButton from "./components/AssistantFloatingButton";
+import { AssistantProvider } from "./context/AssistantProvider";
 
 import Dashboard from "./pages/Dashboard";
+import AiAssistant from "./pages/AiAssistant";
+import AnatomyExplorer from "./pages/AnatomyExplorer";
 import CrewOverview from "./components/CrewOverview";
 import HealthMonitoring from "./pages/HealthMonitoring";
 import RiskAlerts from "./pages/RiskAlerts";
@@ -15,12 +19,19 @@ import "./App.css";
 import "./theme.css";
 
 function AppLayout() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
+  const navigate = useNavigate();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 1023px)").matches);
   const drawerRef = useRef(null);
   const menuButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (pathname === "/" && hash === "#body-explorer") {
+      navigate("/anatomy", { replace: true });
+    }
+  }, [hash, navigate, pathname]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -129,8 +140,18 @@ function AppLayout() {
             />
 
             <Route
+              path="/anatomy"
+              element={<AnatomyExplorer />}
+            />
+
+            <Route
               path="/health-monitoring"
               element={<HealthMonitoring />}
+            />
+
+            <Route
+              path="/ai-assistant"
+              element={<AiAssistant />}
             />
 
             <Route
@@ -155,6 +176,7 @@ function AppLayout() {
           </Routes>
         </div>
       </main>
+      {pathname !== "/ai-assistant" && !isDrawerOpen && <AssistantFloatingButton />}
     </div>
   );
 }
@@ -162,7 +184,9 @@ function AppLayout() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppLayout />
+      <AssistantProvider>
+        <AppLayout />
+      </AssistantProvider>
     </BrowserRouter>
   );
 }

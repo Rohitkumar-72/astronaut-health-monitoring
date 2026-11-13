@@ -6,6 +6,8 @@ dotenv.config({ path: path.resolve(__dirname, ".env") });
 const cors = require("cors");
 const express = require("express");
 const apiRoutes = require("./routes/apiRoutes");
+const createAssistantRouter = require("./routes/assistantRoutes");
+const healthRoutes = require("./routes/healthRoutes");
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -26,6 +28,8 @@ app.use(express.json({ limit: "64kb" }));
 app.get("/api/health-check", (_req, res) => {
   res.json({ data: { status: "ok", service: "ASTRA Crew Health API" }, meta: { simulated: false } });
 });
+app.use("/api/assistant", createAssistantRouter());
+app.use("/api/data", healthRoutes);
 app.use("/api", apiRoutes);
 
 app.use((req, res) => {

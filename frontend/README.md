@@ -386,18 +386,19 @@ npm start
 ```
 
 The API health check is available at `http://localhost:5000/api/health-check`.
+Set `GEMINI_API_KEY` in `backend/.env` to enable assistant responses. Without it, `/api/assistant/chat` returns `AI_NOT_CONFIGURED`; do not put the key in frontend files.
 
 ### Step 6: Configure the Frontend API URL
 
-Set the backend base URL in `frontend/.env`:
+For local development, set the API base URL in `frontend/.env`:
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000/api
+VITE_API_BASE_URL=/api
 ```
 
-`frontend/.env.example` contains this local development value. Restart Vite after changing environment variables.
+Vite proxies `/api` requests to `http://localhost:5000` by default, so browser requests remain same-origin even if Vite selects another port. To use a different backend port, set `ASTRA_API_PROXY_TARGET` (for example, `http://localhost:5001`) in the frontend environment and restart Vite. For a deployed frontend, set `VITE_API_BASE_URL` to the backend API base URL and configure backend CORS with the deployed frontend origin.
 
-The implemented API includes dashboard overview/summary/trends, crew profiles and histories, health readings and metrics, alerts (including status updates), rule-based risks, and mission information. CORS allows the default Vite origins `http://localhost:5173` and `http://127.0.0.1:5173`; configure `FRONTEND_ORIGINS` in `backend/.env` if Vite selects a different origin.
+The implemented API includes dashboard overview/summary/trends, crew profiles and histories, health readings and metrics, alerts (including status updates), rule-based risks, mission information, and `POST /api/assistant/chat`. Configure `FRONTEND_ORIGINS` in `backend/.env` for direct cross-origin requests from a deployed frontend; local Vite proxy requests do not require extra CORS origins.
 
 The backend and frontend read their crew, mission, and alert demonstration records from the shared `shared/` modules. The existing CSV files are empty and are not used as a source. Health values and mission information are simulated or historical demonstration data, not live sensor readings. Risk estimates are rule-based, not a trained AI model. Alert status changes are held in backend memory and reset when the backend process restarts.
 

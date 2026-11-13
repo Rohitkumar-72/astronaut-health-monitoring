@@ -16,10 +16,10 @@ const metricDefinitions = [
 ];
 
 const riskLevels = [
-  { id: "Critical", label: "Critical", className: "critical", color: "#ff788b" },
-  { id: "High", label: "High", className: "high", color: "#ff9f6b" },
-  { id: "Medium", label: "Moderate", className: "moderate", color: "#ffc36b" },
-  { id: "Low", label: "Low", className: "low", color: "#66e0a3" },
+  { id: "Critical", label: "Critical", className: "critical", color: "#ff5268" },
+  { id: "High", label: "High", className: "high", color: "#ff963d" },
+  { id: "Medium", label: "Moderate", className: "moderate", color: "#f4c65e" },
+  { id: "Low", label: "Low", className: "low", color: "#22c985" },
 ];
 
 const comparisonOptions = [

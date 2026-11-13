@@ -121,6 +121,11 @@ const makeTrendInsights = (crew) => {
 
 const outsideDemoBand = (metricId, value) => {
   if (metricId === "heart-rate") return value < 60 || value > 100;
+  if (metricId === "blood-pressure") {
+    const [systolic, diastolic] = String(value).split("/").map(Number);
+    return Number.isFinite(systolic) && Number.isFinite(diastolic)
+      && (systolic >= 130 || diastolic >= 80 || systolic < 90);
+  }
   if (metricId === "oxygen-saturation") return value < 95;
   if (metricId === "body-temperature") return value < 36.1 || value > 37.5;
   if (metricId === "respiratory-rate") return value < 12 || value > 20;
@@ -132,12 +137,46 @@ const outsideDemoBand = (metricId, value) => {
 
 const warningSeverity = (metricId, value) => {
   if (metricId === "heart-rate") return value >= 120 ? "Critical" : value > 100 ? "High" : "Medium";
+  if (metricId === "blood-pressure") {
+    const [systolic, diastolic] = String(value).split("/").map(Number);
+    if (systolic >= 160 || diastolic >= 100) return "Critical";
+    if (systolic >= 140 || diastolic >= 90) return "High";
+    return "Medium";
+  }
   if (metricId === "oxygen-saturation") return value < 90 ? "Critical" : "High";
   if (metricId === "body-temperature") return value >= 39 ? "Critical" : "High";
   if (metricId === "respiratory-rate") return value > 24 ? "Critical" : "High";
   if (metricId === "sleep-duration") return value < 5 ? "High" : "Medium";
   if (metricId === "stress-indicator") return value >= 85 ? "Critical" : value >= 75 ? "High" : "Medium";
   return "Medium";
+};
+
+const confirmedMetricIds = new Map([
+  ["Heart Rate", "heart-rate"],
+  ["Blood Pressure", "blood-pressure"],
+  ["Oxygen Saturation", "oxygen-saturation"],
+  ["Body Temperature", "body-temperature"],
+  ["Respiratory Rate", "respiratory-rate"],
+  ["Sleep Duration", "sleep-duration"],
+  ["Stress Indicator", "stress-indicator"],
+  ["Physical Activity", "physical-activity"],
+]);
+
+const assessConfirmedReading = (parameter, value) => {
+  const metricId = confirmedMetricIds.get(parameter);
+  if (!metricId) return { status: "No configured assessment rule", severity: null };
+  const numericValue = Number(value);
+  if (metricId !== "blood-pressure" && !Number.isFinite(numericValue)) {
+    return { status: "Unable to assess this value", severity: null };
+  }
+  if (!outsideDemoBand(metricId, metricId === "blood-pressure" ? value : numericValue)) {
+    return { status: "Within the configured demonstration band", severity: null };
+  }
+  return {
+    status: "Outside the configured demonstration band",
+    severity: warningSeverity(metricId, metricId === "blood-pressure" ? value : numericValue),
+    action: "Verify the reported value and follow the applicable mission medical protocol.",
+  };
 };
 
 const makeWarnings = (crew, metricDefinitions) => crew.flatMap((member) => metricDefinitions.flatMap((metric) => {
@@ -172,4 +211,4 @@ const analyzeCrew = (crew, metricDefinitions) => ({
   warnings: makeWarnings(crew, metricDefinitions),
 });
 
-module.exports = { analyzeCrew };
+module.exports = { analyzeCrew, assessConfirmedReading };
