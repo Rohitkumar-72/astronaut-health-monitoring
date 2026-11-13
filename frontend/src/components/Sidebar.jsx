@@ -91,29 +91,49 @@ export default function Sidebar({ drawerRef, isOpen, isMobile, onNavigate, onClo
           <section className="app-nav-group" key={label}>
             <h3 className="app-nav-label" title={label}>{label}</h3>
             <div className="app-navigation">
-              {items.map(({ label: itemLabel, to, icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === "/"}
-                  aria-label={itemLabel}
-                  title={itemLabel}
-                  onClick={onNavigate}
-                  tabIndex={isMobile && !isOpen ? -1 : 0}
-                  className={({ isActive }) => {
-                    const isNavigationItemActive = to === "/"
-                      ? pathname === "/" || pathname === "/dashboard"
-                      : isActive;
-                    return `app-nav-link${isNavigationItemActive ? " is-active" : ""}`;
-                  }}
-                >
-                  <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d={icon} />
-                  </svg>
-                  <span className="app-nav-text">{itemLabel}</span>
-                  <span className="app-nav-arrow" aria-hidden="true">›</span>
-                </NavLink>
-              ))}
+              {items.map(({ label: itemLabel, to, icon }) => {
+                const isExternalHtml = to && to.endsWith('.html');
+
+                return isExternalHtml ? (
+                  <a
+                    key={to}
+                    href={to}
+                    aria-label={itemLabel}
+                    title={itemLabel}
+                    onClick={onNavigate}
+                    tabIndex={isMobile && !isOpen ? -1 : 0}
+                    className="app-nav-link"
+                  >
+                    <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d={icon} />
+                    </svg>
+                    <span className="app-nav-text">{itemLabel}</span>
+                    <span className="app-nav-arrow" aria-hidden="true">›</span>
+                  </a>
+                ) : (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === "/"}
+                    aria-label={itemLabel}
+                    title={itemLabel}
+                    onClick={onNavigate}
+                    tabIndex={isMobile && !isOpen ? -1 : 0}
+                    className={({ isActive }) => {
+                      const isNavigationItemActive = to === "/"
+                        ? pathname === "/" || pathname === "/dashboard"
+                        : isActive;
+                      return `app-nav-link${isNavigationItemActive ? " is-active" : ""}`;
+                    }}
+                  >
+                    <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d={icon} />
+                    </svg>
+                    <span className="app-nav-text">{itemLabel}</span>
+                    <span className="app-nav-arrow" aria-hidden="true">›</span>
+                  </NavLink>
+                );
+              })}
             </div>
           </section>
         ))}
