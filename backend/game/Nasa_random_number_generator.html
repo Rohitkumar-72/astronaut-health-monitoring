@@ -1,0 +1,79 @@
+<! doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Random Number Generator Game</title>
+    <style>
+   body {
+            background-image: url("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/general/images/2023/04/h/hubble_ic342_mosaicnew_acscrop2_flat_cont4_finalcrop3.jpg?w=1770");
+            background-size: cover;
+            background-position: center;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #FFFFFF;
+        }
+        h1 {
+            margin-top: 40px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            animation: slideIn 0.5s ease-out forwards;
+        }
+       @keyframes slideIn {
+            0% {
+                opacity: 0;
+                transform: translateY(-80px); /* Upar se niche slide hoga */
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .option-container {
+            background-color: rgba(0, 0, 0, 0.85);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+            text-align: center;
+            width: 340px;
+            margin-top: 150px;
+            border: 1px solid #334155;
+            animation: slideIn 0.8s ease-out forwards;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 25px; /* Yahan se aap space control kar sakte hain */
+            margin-top: 25px;
+            justify-content: center;
+        }
+        button {
+            flex: 1; 
+            padding: 2px 4px;
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: black;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background-color: white;
+            transform: scale(1.05);
+        }
+        h2 {margin-top: 40px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8)
+    </style>
+<body>
+<h1> Reaction Time Test</h1>
+<div class="option-container">
+        <h2 color="#FFFFFF">DO YOU WANT TO PLAY?🎯</h2>
+       <div class="button-group" id="btnGroup">
+            <button onclick="window.location.href='Game_instructions.html';"><pre>    Yes    </pre></button>
+            <button><pre>    No    </pre></button>
+</div>
