@@ -1,0 +1,115 @@
+<! doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Random Number Generator Game</title>
+    <style>
+   body {
+            background-image: url("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/general/images/2023/04/h/hubble_ic342_mosaicnew_acscrop2_flat_cont4_finalcrop3.jpg?w=1770");
+            background-size: cover;
+            background-position: center;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #FFFFFF;
+        }
+        h1 {
+            margin-top: 40px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+       @keyframes slideIn {
+            0% {
+                opacity: 0;
+                transform: translateY(-80px); /* Upar se niche slide hoga */
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .text-container {
+            background-color:rgba(0,0,0,0.70);
+            backdrop-filter: blur(100px);              
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15); 
+    
+            padding: 30px 40px;
+            border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+            text-align: left;
+            width: 600px;
+            margin-top: 50px;
+            animation: slideIn 0.10s ease-out forwards;
+        }
+        
+        .option-container {
+            background-color:rgba(0,0,0,0.65);
+            backdrop-filter: blur(120px);               /* Glass blur */
+            -webkit-backdrop-filter: blur(20px);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0.6, 0.6);
+            text-align: center;
+            width: 500px;
+            margin-top: 60px;
+            border: 1px solid #334155;
+            animation: slideIn 0.8s ease-out backwards;
+        }
+
+        
+        .button-group {
+            display: flex;
+            gap: 25px;
+            margin-top: 25px;
+            justify-content: center;
+        }
+        button {
+            width:200px; 
+                        background-color: #D4AF37;
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: #000000;
+            
+            border: 2.5px solid #000000; 
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.6), 0 4px 15px rgba(0, 0, 0, 0.5);
+            color: black;
+            border-radius: 6px;
+            font-size: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background-color: white;
+            transform: scale(1.05);
+        }
+
+        p { font-size:20px;}
+        
+        h2 {
+            margin-top: 40px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+    </style>
+<body>
+<h1><u> Instructions </u></h1>
+<div class="text-container">
+
+
+<strong><p> 1. You will be shown numbers on the screen from 0 to 9.</p>
+<p> 2. As soon as the number flashes on the screen, press number.</p>
+<p> 3. Timer will go until you get 5 attmepts done. </p>
+<p> 4. Time taken will decide your reaction time. </p></strong>
+</div>
+<div class="option-container">
+       <h2 color="#FFFFFF">START THE GAME?</h2>
+       <div class="button-group">
+            <button onclick="window.location.href='Game.html';"><pre>    Yes    </pre></button>
+            <button onclick="window.location.href='Nasa_random_number_generator.html';" onclick="startGame()"><pre>    No    </pre></button>
+</div>
+
+
