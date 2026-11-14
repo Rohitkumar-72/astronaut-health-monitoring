@@ -1,0 +1,186 @@
+<! doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Random Number Generator Game</title>
+    <style>
+      body {
+            background-image: url("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/general/images/2023/04/h/hubble_ic342_mosaicnew_acscrop2_flat_cont4_finalcrop3.jpg?w=1770");
+            background-size: cover;
+            background-position: center;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #FFFFFF;
+        }
+        h1 {
+            margin-top: 40px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+       @keyframes slideIn {
+            0% {
+                opacity: 0;
+                transform: translateY(-80px); /* Upar se niche slide hoga */
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+      .game-container {
+            background-color:rgba(0,0,0,0.70);
+            backdrop-filter: blur(100px);              
+            -webkit-backdrop-filter: blur(20px);
+            border: 2.5px solid #FFD700; 
+    
+            padding: 30px 40px;
+            border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+            text-align: left;
+            width: 600px;
+            margin-top: 50px;
+            animation: slideIn 0.10s ease-out forwards;
+        }
+        .number-display {
+            font-size: 70px;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+            margin: 20px 0;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .button-group {
+            display: flex;
+            gap: 25px;
+            margin-top: 25px;
+            justify-content: center;
+        }
+        button {
+            width: 140px;
+            padding: 10px 15px;
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: #000000;
+            border: 2.5px solid #FFFFFF; 
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.6), 0 4px 15px rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease-in-out;
+        }
+        button:hover {
+            background: #FFFFFF;
+            color: #000;
+            transform: scale(1.08);
+            border-color: #FFD700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.9), 0 6px 20px rgba(0, 0, 0, 0.6);
+        }
+</style>
+<body>
+<h1> Guess The Number</h1>
+<div class="game-container">
+        <h2 id="statusText" style="color: #fef08a;">Get Ready</h2>
+        <p id="subText">Target: 5 Attempts</p>
+
+        <div id="playArea" style="display: none;">
+            <div class="number-display" id="numBox">Wait For Number...</div>
+            <div class="button-group">
+                <button onpointerdown="pressNumber(event)">Number</button>
+            </div>
+        </div>
+
+        <div id="controlsArea">
+        <button class="start-btn" id="mainBtn" onclick="startGame()">Start Test</button>
+        </div>
+    
+        <p id="feedbackText" style="margin-top: 20px; font-weight: bold;"></p>
+</div>
+<script>
+        const targetCorrect = 5;
+        let currentNumber = 0;
+        let startTime = 0;
+        let reactionTimes = [];
+        let totalAttempts = 0;
+        let isWaitingForInput = false;
+
+        function startGame() {
+            totalAttempts = 0;
+            reactionTimes = [];
+            let controls = document.getElementById('controlsArea');
+            controls.style.display = 'block';
+            controls.innerHTML = `<button class="start-btn" id="mainBtn" onclick="startGame()">Start Test</button>`;
+            document.getElementById('mainBtn').style.display = 'none';
+            document.getElementById('subText').style.display = 'none';
+            document.getElementById('playArea').style.display = 'block';
+            document.getElementById('statusText').textContent = "Get Ready...";
+            nextRound();
+        }
+
+        function nextRound() {
+            if (totalAttempts >= targetCorrect) {
+                endGame();
+                return;
+            }
+
+            document.getElementById('numBox').textContent = "...";
+            document.getElementById('feedbackText').textContent = "";
+            isWaitingForInput = true;
+
+            let randomDelay = Math.random() * 1000 + 1000;
+
+            setTimeout(() => {
+                currentNumber = Math.floor(Math.random() * 10); // 0 to 9
+                document.getElementById('numBox').textContent = currentNumber;
+                
+                isWaitingForInput = false;
+                startTime = performance.now(); 
+            }, randomDelay);
+        }
+
+        function pressNumber(event) {
+            if (event) event.preventDefault();
+
+            if (isWaitingForInput || startTime === 0) return; 
+
+               let endTime = performance.now();
+               let reactionTime = Math.round(endTime - startTime);
+               startTime = 0;
+              totalAttempts++;
+        
+               reactionTimes.push(reactionTime);
+               document.getElementById('feedbackText').textContent = `Reaction: ${reactionTime} ms`;
+               document.getElementById('feedbackText').style.color = "#4ade80";
+
+        setTimeout(nextRound, 1000);
+
+         }
+
+        function endGame() {
+            document.getElementById('playArea').style.display = 'none';
+            document.getElementById('statusText').textContent = "Test Completed! 🎉";
+            
+            let avgTime = reactionTimes.length > 0 ? Math.round(reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length) : 0;
+            
+            document.getElementById('feedbackText').innerHTML = `
+            Average Reaction Time: <span style="color: #FFD700; font-size: 22px;">${avgTime} ms</span>
+            `;
+            
+            let controls = document.getElementById('controlsArea');
+                 controls.style.display = 'block';
+                 controls.innerHTML = `<div class="button-group">
+                <button onclick="startGame()">Play Again</button>
+                <button onclick="window.location.href='Nasa_random_number_generator.html';">Quit</button>
+            </div>`;
+        }
+    </script>
+
+</body>
+</html>
+

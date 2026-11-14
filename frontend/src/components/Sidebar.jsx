@@ -15,6 +15,7 @@ const navigationGroups = [
       { label: "ASTRA AI Assistant", to: "/ai-assistant", icon: "M12 3v3m0 12v3M3 12h3m12 0h3M5.64 5.64l2.12 2.12m8.48 8.48 2.12 2.12m0-12.72-2.12 2.12m-8.48 8.48-2.12 2.12M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" },
       { label: "Health History", to: "/health-history", icon: "M3 12a9 9 0 1 0 2.64-6.36L3 8m0-5v5h5m4-1v5l3 2" },
       { label: "Anatomy / Body Explorer", to: "/anatomy", icon: "M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm0 6v6m-5-3 5 3 5-3m-8 7 3-4 3 4m-6-4-2 5m8-5 2 5" },
+      { label: "Cognitive Reaction Test", to: "/Nasa_random_number_generator.html", icon: "M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-3.44-2.16"},
     ],
   },
   {
@@ -90,29 +91,49 @@ export default function Sidebar({ drawerRef, isOpen, isMobile, onNavigate, onClo
           <section className="app-nav-group" key={label}>
             <h3 className="app-nav-label" title={label}>{label}</h3>
             <div className="app-navigation">
-              {items.map(({ label: itemLabel, to, icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === "/"}
-                  aria-label={itemLabel}
-                  title={itemLabel}
-                  onClick={onNavigate}
-                  tabIndex={isMobile && !isOpen ? -1 : 0}
-                  className={({ isActive }) => {
-                    const isNavigationItemActive = to === "/"
-                      ? pathname === "/" || pathname === "/dashboard"
-                      : isActive;
-                    return `app-nav-link${isNavigationItemActive ? " is-active" : ""}`;
-                  }}
-                >
-                  <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d={icon} />
-                  </svg>
-                  <span className="app-nav-text">{itemLabel}</span>
-                  <span className="app-nav-arrow" aria-hidden="true">›</span>
-                </NavLink>
-              ))}
+              {items.map(({ label: itemLabel, to, icon }) => {
+                const isExternalHtml = to && to.endsWith('.html');
+
+                return isExternalHtml ? (
+                  <a
+                    key={to}
+                    href={to}
+                    aria-label={itemLabel}
+                    title={itemLabel}
+                    onClick={onNavigate}
+                    tabIndex={isMobile && !isOpen ? -1 : 0}
+                    className="app-nav-link"
+                  >
+                    <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d={icon} />
+                    </svg>
+                    <span className="app-nav-text">{itemLabel}</span>
+                    <span className="app-nav-arrow" aria-hidden="true">›</span>
+                  </a>
+                ) : (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === "/"}
+                    aria-label={itemLabel}
+                    title={itemLabel}
+                    onClick={onNavigate}
+                    tabIndex={isMobile && !isOpen ? -1 : 0}
+                    className={({ isActive }) => {
+                      const isNavigationItemActive = to === "/"
+                        ? pathname === "/" || pathname === "/dashboard"
+                        : isActive;
+                      return `app-nav-link${isNavigationItemActive ? " is-active" : ""}`;
+                    }}
+                  >
+                    <svg className="app-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d={icon} />
+                    </svg>
+                    <span className="app-nav-text">{itemLabel}</span>
+                    <span className="app-nav-arrow" aria-hidden="true">›</span>
+                  </NavLink>
+                );
+              })}
             </div>
           </section>
         ))}
