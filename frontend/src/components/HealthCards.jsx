@@ -32,6 +32,9 @@ export default function HealthCards({ alerts = [] }) {
             <RiskBadge severity={reading.severity} status={reading.status} />
             <span>{reading.astronautName} · {reading.timestamp ? new Date(reading.timestamp).toLocaleString() : "Timestamp unavailable"}</span>
           </div>
+          <p className="health-metric-source">
+            {reading.simulated ? "SIMULATED DEMO DATA" : reading.source || "CSV SOURCE"}
+          </p>
         </article>
       ))}
     </div>

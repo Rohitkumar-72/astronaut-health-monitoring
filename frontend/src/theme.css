@@ -510,7 +510,7 @@ body {
 
 .dashboard-mission-strip {
   display: grid;
-  grid-template-columns: minmax(230px, 1.6fr) repeat(4, minmax(110px, 1fr));
+  grid-template-columns: minmax(220px, 1.45fr) repeat(5, minmax(100px, 1fr));
   align-items: center;
   gap: 15px;
   padding: 16px 19px;
@@ -583,7 +583,7 @@ body {
 
 .dashboard-command-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 

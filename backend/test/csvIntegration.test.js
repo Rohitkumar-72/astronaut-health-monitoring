@@ -5,6 +5,7 @@ const apiRoutes = require("../routes/apiRoutes");
 const healthRoutes = require("../routes/healthRoutes");
 const csvService = require("../services/csvService");
 const healthService = require("../services/healthService");
+const simulationService = require("../services/simulationService");
 
 async function withServer(callback) {
   const app = express();
@@ -54,15 +55,20 @@ test("available CSV datasets are returned even when a declared dataset is missin
   });
 });
 
-test("dashboard APIs use CSV crew and NASA data without inventing health readings or risk", async () => {
+test("dashboard APIs combine CSV crew and NASA data with labeled simulation when measurements are missing", async () => {
   const model = await healthService.getData();
   assert.equal(model.crew.length, 17);
   assert.equal(model.crew[0].name, "Soyeon (Lee So-hyun)");
   assert.equal(model.crew[0].currentLocation, "Earth");
   assert.equal(model.crew[0].missionTitle, "Soyuz TMA-12 / Soyuz TMA-11");
-  assert.equal(model.healthReadings.length, 0);
-  assert.deepEqual(model.statistics, []);
-  assert.equal(model.riskOutlooks.every((risk) => risk.id === "Unknown" && risk.score === null), true);
+  assert.ok(model.healthReadings.length > 0);
+  assert.ok(model.healthReadings.some((reading) => reading.simulated && reading.source === "SIMULATED DEMO DATA"));
+  assert.ok(model.statistics.length > 0);
+  assert.ok(model.riskOutlooks.some((risk) => risk.id !== "Unknown"));
+  assert.equal(model.dataMode, "MIXED DATA");
+  assert.equal(model.simulation.enabled, true);
+  assert.equal(model.healthDataQuality.csvRows, 0);
+  assert.ok(model.healthDataQuality.simulatedRows > 0);
   assert.equal(model.environmentBenchmarks.Earth.length, 14);
   assert.equal(model.environmentBenchmarks.ISS[0].upperLimit, 140);
   assert.equal(model.environmentBenchmarks.Moon.length, 14);
@@ -73,12 +79,37 @@ test("dashboard APIs use CSV crew and NASA data without inventing health reading
     const response = await fetch(`${baseUrl}/dashboard/overview`);
     const body = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(body.meta.simulated, false);
+    assert.equal(body.meta.simulated, true);
     assert.equal(body.data.crew.length, 17);
-    assert.equal(body.data.healthReadings.length, 0);
+    assert.ok(body.data.healthReadings.length > 0);
+    assert.ok(body.data.healthReadings.every((reading) => reading.simulated));
+    assert.ok(body.data.statistics.length > 0);
     assert.equal(body.data.environmentBenchmarks.ISS.length, 14);
     assert.equal(body.data.datasetStatus.find((entry) => entry.dataset === "healthReadings").records, 0);
   });
+});
+
+test("simulated readings are deterministic, explicitly sourced, and deduplicated against CSV samples", () => {
+  const crew = [{
+    id: "AST-001",
+    name: "Test crew",
+    currentLocation: "Earth",
+    simulated: false,
+  }];
+  const timestamp = "2026-03-16T12:00:00.000Z";
+  const existingRecords = [{
+    astronautId: "AST-001",
+    timestamp,
+    measurements: [{ parameter: "Heart Rate", value: 72, unit: "BPM" }],
+  }];
+  const options = [crew, healthService.metricDefinitions, existingRecords, {}, new Date(timestamp), 2];
+  const first = simulationService.generateDemoReadings(...options);
+  const second = simulationService.generateDemoReadings(...options);
+
+  assert.deepEqual(first, second);
+  assert.equal(first.every((record) => record.simulated && record.source === "SIMULATED DEMO DATA"), true);
+  assert.equal(first.some((record) => record.timestamp === timestamp
+    && record.measurements.some((measurement) => measurement.parameter === "Heart Rate")), false);
 });
 
 test("CSV health normalization skips invalid rows and preserves available measurements", () => {

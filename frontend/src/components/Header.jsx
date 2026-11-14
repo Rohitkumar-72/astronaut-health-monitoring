@@ -6,6 +6,7 @@ const pageTitles = [
   ["/health-monitoring", "Health Monitoring"],
   ["/ai-assistant", "ASTRA AI Assistant"],
   ["/health-history", "Health History"],
+  ["/cognitive-test", "Cognitive Reaction Test"],
   ["/risk-alerts", "Risk Alerts"],
   ["/settings", "Settings"],
 ];

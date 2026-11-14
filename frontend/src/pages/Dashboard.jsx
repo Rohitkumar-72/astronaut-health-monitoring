@@ -33,8 +33,10 @@ const newestFirst = (first, second) => dateValue(second.timestamp) - dateValue(f
 const getLatestByMetric = (alerts) => {
   const latest = new Map();
   for (const alert of alerts) {
-    if (!alert?.parameter || alert.value === null || alert.value === undefined || alert.value === ""
-      || !Number.isFinite(Number(alert.value))) continue;
+    const validValue = alert?.parameter === "Blood Pressure"
+      ? /^\d{1,3}\s*\/\s*\d{1,3}$/.test(String(alert.value))
+      : Number.isFinite(Number(alert?.value));
+    if (!alert?.parameter || alert.value === null || alert.value === undefined || alert.value === "" || !validValue) continue;
     const current = latest.get(alert.parameter);
     if (!current || dateValue(alert.timestamp) >= dateValue(current.timestamp)) {
       latest.set(alert.parameter, alert);
@@ -100,6 +102,10 @@ function AlertItem({ alert }) {
         </div>
         <p>{alert.message || "No reason was supplied for this alert."}</p>
         <span>{alert.astronautName || "Crew member"} · {formatTimestamp(alert.timestamp)}</span>
+        <small>{alert.simulated ? "SIMULATED DEMO DATA" : alert.source || "CSV SOURCE"}</small>
+        {alert.referenceRange && <small>Demo reference range: {alert.referenceRange}</small>}
+        {alert.recommendation && <small>Follow-up: {alert.recommendation}</small>}
+        {alert.simulated && <span className="dashboard-demo-record-label">SIMULATED DEMO ALERT</span>}
       </div>
       <strong className="dashboard-alert-value">{alert.value} {alert.unit}</strong>
     </article>
@@ -108,17 +114,44 @@ function AlertItem({ alert }) {
 
 const comparisonCharts = [
   { parameter: "Heart Rate", label: "Heart rate", unit: "BPM", minimum: 40, maximum: 140 },
+  { parameter: "Blood Pressure", label: "Blood pressure · systolic", unit: "mmHg", minimum: 60, maximum: 180 },
   { parameter: "Oxygen Saturation", label: "Blood oxygen", unit: "%", minimum: 85, maximum: 100 },
+  { parameter: "Body Temperature", label: "Body temperature", unit: "°C", minimum: 34, maximum: 41 },
   { parameter: "Sleep Duration", label: "Sleep duration", unit: "hours", minimum: 0, maximum: 10 },
   { parameter: "Physical Activity", label: "Physical activity", unit: "%", minimum: 0, maximum: 100 },
 ];
 
 const crewLineColors = ["#36d5f2", "#398dff", "#a276ff", "#22c985"];
 
+const chartValue = (parameter, value) => {
+  const parsed = parameter === "Blood Pressure" ? Number(String(value).split("/")[0]) : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 function CrewComparisonChart({ definition, readings }) {
-  const series = readings
-    .filter((reading) => reading.parameter === definition.parameter && Array.isArray(reading.history) && reading.history.length > 1)
+  const latestByCrew = new Map();
+  for (const reading of readings) {
+    if (reading.parameter !== definition.parameter || !Array.isArray(reading.history)) continue;
+    const previous = latestByCrew.get(reading.crewId);
+    if (!previous || dateValue(reading.timestamp) >= dateValue(previous.timestamp)) {
+      latestByCrew.set(reading.crewId, reading);
+    }
+  }
+  const series = [...latestByCrew.values()]
+    .filter((reading) => reading.history.filter((value) => chartValue(definition.parameter, value) !== null).length > 1)
     .slice(0, 4);
+  const firstTimestamp = series
+    .map((reading) => reading.historyTimestamps?.[0])
+    .filter(Boolean)
+    .sort()[0];
+  const lastTimestamp = series
+    .map((reading) => reading.historyTimestamps?.at(-1))
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  const rangeLabel = firstTimestamp && lastTimestamp
+    ? `${new Date(firstTimestamp).toLocaleDateString()} – ${new Date(lastTimestamp).toLocaleDateString()}`
+    : "Sample timestamps unavailable";
 
   return (
     <article className="dashboard-comparison-card">
@@ -132,7 +165,7 @@ function CrewComparisonChart({ definition, readings }) {
             <svg viewBox="0 0 300 120" role="img" aria-label={`${definition.label} sample trends by crew member`}>
               {[25, 55, 85, 110].map((y) => <line key={y} x1="8" x2="294" y1={y} y2={y} className="dashboard-comparison-guide" />)}
               {series.map((reading, seriesIndex) => {
-                const values = reading.history.map(Number).filter(Number.isFinite);
+                const values = reading.history.map((value) => chartValue(definition.parameter, value)).filter(Number.isFinite);
                 const points = values.map((value, index) => {
                   const x = 12 + (index / (values.length - 1)) * 276;
                   const normalized = (value - definition.minimum) / (definition.maximum - definition.minimum);
@@ -144,7 +177,7 @@ function CrewComparisonChart({ definition, readings }) {
                     <polyline points={points.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke={crewLineColors[seriesIndex]} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                     {points.map((point, index) => (
                       <circle key={`${reading.crewId}-${index}`} cx={point.x} cy={point.y} r="3" fill={crewLineColors[seriesIndex]}>
-                        <title>{`${reading.astronautName}: ${point.value} ${definition.unit} · sample ${index + 1}`}</title>
+                        <title>{`${reading.astronautName}: ${reading.history[index]} ${definition.parameter === "Blood Pressure" ? "mmHg" : definition.unit} · ${reading.historyTimestamps?.[index] ? new Date(reading.historyTimestamps[index]).toLocaleString() : `sample ${index + 1}`}`}</title>
                       </circle>
                     ))}
                   </g>
@@ -157,6 +190,7 @@ function CrewComparisonChart({ definition, readings }) {
               <span key={reading.crewId}><i style={{ backgroundColor: crewLineColors[index] }} />{reading.astronautName}</span>
             ))}
           </div>
+          <p className="dashboard-comparison-range">{rangeLabel}</p>
         </>
       ) : <p className="dashboard-comparison-empty">No trend samples are available for this indicator.</p>}
     </article>
@@ -221,8 +255,8 @@ function CrewSnapshot({ crew, readings }) {
       </div>
       <div className="dashboard-crew-grid">
         {crew.map((member) => {
-          const memberReadings = readings.filter((reading) => reading.crewId === member.id);
-          const latestMetrics = ["Heart Rate", "Oxygen Saturation"]
+          const memberReadings = readings.filter((reading) => reading.crewId === member.id).sort(newestFirst);
+          const latestMetrics = ["Heart Rate", "Oxygen Saturation", "Sleep Duration", "Physical Activity"]
             .map((parameter) => memberReadings.find((reading) => reading.parameter === parameter))
             .filter(Boolean);
           const riskClass = String(member.risk || "unknown").toLowerCase();
@@ -245,7 +279,7 @@ function CrewSnapshot({ crew, readings }) {
                 </span>
               </div>
               <div className="dashboard-crew-score">
-                <span>{member.id}</span>
+                <span>{member.id} · {member.scoreSource || "Rule-based indicator"}</span>
                 <strong>{member.score !== null && Number.isFinite(Number(member.score)) ? `${member.score}` : "—"}{member.score !== null && Number.isFinite(Number(member.score)) && <small> / 100</small>}</strong>
               </div>
               <div className="dashboard-crew-metrics">
@@ -266,14 +300,14 @@ function CrewSnapshot({ crew, readings }) {
   );
 }
 
-function HealthStatistics({ statistics, readingCount }) {
+function HealthStatistics({ statistics, readingCount, dataMode, csvRows, simulatedRows }) {
   return (
     <section className="app-panel dashboard-readings-panel" aria-labelledby="health-statistics-title">
       <div className="dashboard-section-heading dashboard-panel-heading">
         <div>
-          <span className="dashboard-section-kicker">CSV HEALTH RECORDS</span>
+          <span className="dashboard-section-kicker">{dataMode || "HEALTH RECORDS"}</span>
           <h2 id="health-statistics-title">Health statistics</h2>
-          <p>{readingCount} measured parameter records are available in the source dataset.</p>
+          <p>{readingCount} parameter records · {csvRows} CSV · {simulatedRows} simulated sample sets.</p>
         </div>
       </div>
       {statistics.length ? (
@@ -368,6 +402,7 @@ export default function Dashboard() {
   const healthyCrew = risks.filter((risk) => risk.id === "Low").length;
   const observationCrew = risks.filter((risk) => risk.id === "Medium").length;
   const criticalAlerts = activeAlerts.filter((alert) => alert.severity === "Critical").length;
+  const highRiskCrew = risks.filter((risk) => risk.id === "High").length;
   const scoredCrew = crew.filter((member) => member.score !== null && Number.isFinite(Number(member.score)));
   const averageScore = scoredCrew.length
     ? Math.round(scoredCrew.reduce((sum, member) => sum + Number(member.score), 0) / scoredCrew.length)
@@ -382,9 +417,9 @@ export default function Dashboard() {
             <h1 id="dashboard-title">Mission Control</h1>
             <p>Crew roster, health records, and mission reference data from the backend CSV datasets</p>
           </div>
-          <div className="dashboard-data-source">
+          <div className="dashboard-data-source" aria-label="Dashboard source data is loading">
             <span className="dashboard-source-dot" />
-             
+            <strong>LOADING SOURCE DATA</strong>
           </div>
         </header>
         <section className="app-panel" role={error ? "alert" : "status"}>
@@ -409,9 +444,10 @@ export default function Dashboard() {
           <h1 id="dashboard-title">Mission Control</h1>
           <p>Astronaut health intelligence and mission overview</p>
         </div>
-        <div className="dashboard-data-source">
-           
-          
+        <div className="dashboard-data-source" aria-label={`Data source: ${overview.dataMode}`}>
+          <span className="dashboard-source-dot" />
+          <strong>{overview.dataMode || "DATA SOURCE UNKNOWN"}</strong>
+          <small>{overview.healthDataQuality?.simulatedRows || 0} simulated sample sets</small>
         </div>
       </header>
 
@@ -421,6 +457,7 @@ export default function Dashboard() {
           <div><small>CURRENT MISSION</small><strong>{mission?.name || "Mission information unavailable"}</strong></div>
         </div>
         <div><small>MISSION DAY</small><strong>{mission ? `${mission.day} / ${mission.durationDays}` : "—"}</strong></div>
+        <div><small>MISSION PHASE</small><strong>{mission?.phase || "Unavailable"}</strong></div>
         <div><small>MISSION STATUS</small><strong className="dashboard-mission-status"><i />{mission?.status || "Unavailable"}</strong></div>
         <div><small>CREW MEMBERS</small><strong>{crew.length}</strong></div>
         <div><small>LAST SYNC</small><strong>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong></div>
@@ -428,8 +465,16 @@ export default function Dashboard() {
 
       {overview.datasetErrors?.length > 0 && (
         <section className="app-panel" role="status" aria-label="CSV dataset availability">
-          <strong>Some declared CSV datasets are unavailable.</strong>
+          <strong>Some declared CSV datasets are unavailable. Available files continue to be used.</strong>
           <ul>{overview.datasetErrors.map((datasetError) => <li key={datasetError.dataset}>{datasetError.message}</li>)}</ul>
+          {overview.simulation?.enabled && <p>Dashboard health trends are supplemented by explicitly labeled simulated data; missing CSV files are not treated as actual records.</p>}
+        </section>
+      )}
+
+      {overview.simulation?.enabled && (
+        <section className="app-panel dashboard-demo-notice" role="note">
+          <strong>SIMULATED DEMO DATA</strong>
+          <span>Generated health samples and rule-based risk indicators are demonstrations only—not actual astronaut measurements, live telemetry, or medical assessments.</span>
         </section>
       )}
 
@@ -437,8 +482,9 @@ export default function Dashboard() {
         <article className="dashboard-command-stat"><span className="dashboard-command-icon">◉</span><div><small>Total crew members</small><strong>{crew.length}</strong><span>Mission roster</span></div></article>
         <article className="dashboard-command-stat dashboard-command-healthy"><span className="dashboard-command-icon">✓</span><div><small>Low risk</small><strong>{healthyCrew}</strong><span>Risk engine result</span></div></article>
         <article className="dashboard-command-stat dashboard-command-watch"><span className="dashboard-command-icon">◷</span><div><small>Under observation</small><strong>{observationCrew}</strong><span>Moderate risk engine result</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-watch"><span className="dashboard-command-icon">!</span><div><small>High risk</small><strong>{highRiskCrew}</strong><span>Rule-based demo category</span></div></article>
         <article className="dashboard-command-stat dashboard-command-critical"><span className="dashboard-command-icon">!</span><div><small>Critical alerts</small><strong>{criticalAlerts}</strong><span>Unresolved records</span></div></article>
-        <article className="dashboard-command-stat dashboard-command-score"><span className="dashboard-command-icon">↗</span><div><small>Average crew score</small><strong>{averageScore ?? "—"}{averageScore !== null && <small> / 100</small>}</strong><span>{averageScore === null ? "No score data available" : "Based on available alerts"}</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-score"><span className="dashboard-command-icon">↗</span><div><small>Average rule score</small><strong>{averageScore ?? "—"}{averageScore !== null && <small> / 100</small>}</strong><span>{averageScore === null ? "Insufficient source readings" : "Demonstration heuristic, not clinical"}</span></div></article>
       </section>
 
       <section className="dashboard-intelligence-grid" aria-label="Crew health analytics">
@@ -462,7 +508,7 @@ export default function Dashboard() {
         <article className="dashboard-kpi-card">
           <div className="dashboard-kpi-top"><span>Tracked indicators</span><span className="dashboard-count-icon dashboard-violet-icon" aria-hidden="true">◈</span></div>
           <div className="dashboard-kpi-value-row"><strong>{validMetrics.length}<small> / {metricDefinitions.length}</small></strong></div>
-          <span className="dashboard-kpi-caption">{observationCount} CSV measurement records</span>
+          <span className="dashboard-kpi-caption">{observationCount} health measurement samples</span>
         </article>
       </section>
 
@@ -471,7 +517,7 @@ export default function Dashboard() {
           <div>
             <span className="dashboard-section-kicker">OBSERVATION HISTORY</span>
             <h2>Health trends</h2>
-            <p>Timestamped health records supplied by health_readings.csv.</p>
+            <p>Timestamped records from CSV and clearly labeled simulated samples.</p>
           </div>
           <Link className="dashboard-section-link" to="/health-monitoring">Open health monitoring <span aria-hidden="true">→</span></Link>
         </div>
@@ -489,7 +535,13 @@ export default function Dashboard() {
 
       <CrewSnapshot crew={crew} readings={healthReadings} />
 
-      <HealthStatistics statistics={overview.statistics || []} readingCount={healthReadings.length} />
+      <HealthStatistics
+        statistics={overview.statistics || []}
+        readingCount={healthReadings.length}
+        dataMode={overview.dataMode}
+        csvRows={overview.healthDataQuality?.csvRows || 0}
+        simulatedRows={overview.healthDataQuality?.simulatedRows || 0}
+      />
       <EnvironmentBenchmarks benchmarks={overview.environmentBenchmarks} />
 
       <section className="dashboard-bottom-grid">
@@ -528,6 +580,9 @@ export default function Dashboard() {
                     <td>
                       <strong>{alert.parameter}</strong>
                       <span>{alert.astronautName} · {formatTimestamp(alert.timestamp)}</span>
+                      <span className={alert.simulated ? "dashboard-demo-record-label" : undefined}>
+                        {alert.simulated ? "SIMULATED DEMO DATA" : alert.source || "CSV SOURCE"}
+                      </span>
                     </td>
                     <td>{alert.value} {alert.unit}</td>
                     <td><RiskBadge severity={alert.severity} status={alert.status} /></td>

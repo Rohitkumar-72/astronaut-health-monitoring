@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { parse } = require("csv-parse/sync");
 
-const DATA_DIR = path.join(__dirname, "../data");
+const DATA_DIR = path.resolve(__dirname, "..", "data");
+const warnedDatasets = new Set();
 
 const CSV_FILES = {
   crewInfo: "crew_info.csv",
@@ -67,6 +68,13 @@ function getAllCSVData() {
       data[key] = readCSV(fileName);
     } catch (error) {
       data[key] = [];
+      if (!warnedDatasets.has(key)) {
+        warnedDatasets.add(key);
+        console.warn(
+          `[CSV] ${error.code || "CSV_READ_ERROR"} for ${fileName} at ${path.join(DATA_DIR, fileName)}: `
+          + `${error.message}.`
+        );
+      }
       errors.push({
         dataset: key,
         file: fileName,

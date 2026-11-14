@@ -310,7 +310,8 @@
 
 .crew-search-label input,
 .crew-alert-filters select,
-.crew-trend-select-label select {
+.crew-trend-select-label select,
+.crew-roster-filter select {
   min-height: 34px;
   padding: 0 10px;
   color: #d7e2f2;
@@ -322,6 +323,29 @@
 
 .crew-search-label input {
   width: 200px;
+}
+
+.crew-roster-filters {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.2fr) repeat(3, minmax(125px, 1fr));
+  align-items: end;
+  gap: 8px;
+  width: min(100%, 720px);
+}
+
+.crew-roster-filter {
+  display: grid;
+  gap: 4px;
+  color: #a7b7cc;
+  font-size: 8px;
+}
+
+.crew-roster-filter select {
+  width: 100%;
+}
+
+.crew-roster-filters .crew-search-label input {
+  width: 100%;
 }
 
 .crew-search-label input::placeholder {
@@ -1716,6 +1740,11 @@
   .crew-search-label,
   .crew-search-label input {
     width: 100%;
+  }
+
+  .crew-roster-filters {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .crew-metric-selector {
