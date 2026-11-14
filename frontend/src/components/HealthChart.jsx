@@ -1,7 +1,18 @@
 export default function HealthChart({ alert, title = "Reading history" }) {
-  const values = Array.isArray(alert?.history)
-    ? alert.history.filter((value) => Number.isFinite(Number(value))).map(Number)
+  const isBloodPressure = alert?.parameter === "Blood Pressure";
+  const samples = Array.isArray(alert?.history)
+    ? alert.history.map((rawValue, index) => {
+      const value = rawValue;
+      const parsed = isBloodPressure ? Number(String(value).split("/")[0]) : Number(value);
+      return Number.isFinite(parsed)
+        ? { rawValue, value: parsed, timestamp: alert.historyTimestamps?.[index] }
+        : null;
+    }).filter(Boolean)
     : [];
+  const values = samples.map((sample) => sample.value);
+  const dateLabel = (timestamp, fallback) => timestamp && Number.isFinite(Date.parse(timestamp))
+    ? new Date(timestamp).toLocaleDateString()
+    : fallback;
 
   if (values.length === 0) {
     return (
@@ -34,7 +45,7 @@ export default function HealthChart({ alert, title = "Reading history" }) {
         <div>
           <h2>{title}</h2>
           <p>
-            {alert.parameter} · {alert.astronautName} · {alert.source || "source records"}
+            {alert.parameter}{isBloodPressure ? " · systolic trend" : ""} · {alert.astronautName} · {alert.source || "source records"}
           </p>
         </div>
         <span className="app-chart-current">
@@ -53,14 +64,20 @@ export default function HealthChart({ alert, title = "Reading history" }) {
             <line key={y} x1="7" x2="94" y1={y} y2={y} className="app-chart-grid" />
           ))}
           <polyline points={coordinates} className="app-chart-line" />
-          {values.map((value, index) => {
+          {samples.map((sample, index) => {
+            const { value } = sample;
             const x = values.length === 1 ? 50 : 12 + (index / (values.length - 1)) * 76;
             const y = 84 - ((value - min) / range) * 62;
-            return <circle key={`${index}-${value}`} cx={x} cy={y} r="1.4" className="app-chart-point" />;
+            return (
+              <circle key={`${index}-${value}`} cx={x} cy={y} r="1.4" className="app-chart-point">
+                <title>{`${sample.rawValue} ${alert.unit || ""} · ${sample.timestamp ? new Date(sample.timestamp).toLocaleString() : `sample ${index + 1}`}`}</title>
+              </circle>
+            );
           })}
         </svg>
         <div className="app-chart-labels">
-          {values.map((_, index) => <span key={index}>Sample {index + 1}</span>)}
+          <span>{dateLabel(samples[0]?.timestamp, "First sample")}</span>
+          <span>{dateLabel(samples.at(-1)?.timestamp, "Latest sample")}</span>
         </div>
       </div>
       <p className="app-chart-note">

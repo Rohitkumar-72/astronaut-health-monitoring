@@ -293,6 +293,10 @@ function AlertDetailsModal({ alert, onClose, onUpdate }) {
               <span>Detected at</span>
               <strong>{formatDate(alert.timestamp)}</strong>
             </div>
+            <div className="ahm-detail-item">
+              <span>Data source</span>
+              <strong>{alert.simulated ? "SIMULATED DEMO DATA" : alert.source || "Imported alert record"}</strong>
+            </div>
           </div>
 
           <div className="ahm-detail-section">
@@ -844,6 +848,7 @@ export default function AlertPanel() {
                     <span>{alert.astronautId}</span>
                     <span>{alert.astronautName}</span>
                     <span>{formatTime(alert.timestamp)}</span>
+                    <span>{alert.simulated ? "SIMULATED DEMO DATA" : alert.source || "SOURCE ALERT"}</span>
                   </div>
                 </div>
 

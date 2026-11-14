@@ -57,6 +57,19 @@ function getMetricStatus(metric, reading) {
     return { label: "No reading", className: "unknown" };
   }
   if (reading.status === "Available" || reading.status === "Unassessed") {
+    if (metric.id === "blood-pressure" && reading.referenceBounds?.systolic && reading.referenceBounds?.diastolic) {
+      const [systolic, diastolic] = String(reading.value).split("/").map(Number);
+      const outside = systolic < reading.referenceBounds.systolic.lowerLimit
+        || systolic > reading.referenceBounds.systolic.upperLimit
+        || diastolic < reading.referenceBounds.diastolic.lowerLimit
+        || diastolic > reading.referenceBounds.diastolic.upperLimit;
+      if (outside) return { label: "Outside source reference range", className: "moderate" };
+    } else if (reading.referenceBounds
+      && Number.isFinite(Number(reading.value))
+      && (Number(reading.value) < reading.referenceBounds.lowerLimit
+        || Number(reading.value) > reading.referenceBounds.upperLimit)) {
+      return { label: "Outside source reference range", className: "moderate" };
+    }
     return { label: "Reading available · not assessed", className: "unknown" };
   }
   if (reading.status === "Unavailable") return { label: "No reading", className: "unknown" };
@@ -115,6 +128,8 @@ function SummaryCard({ label, value, description, icon, tone }) {
 }
 
 function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOutlook, onClose }) {
+  const hasSimulatedReadings = Object.values(member.readings || {}).some((reading) => reading?.simulated);
+  const profileSource = member.profileSource || (member.simulated ? "SIMULATED DEMO DATA" : "CREW ROSTER CSV");
   const historyOptions = metricDefinitions.filter((metric) =>
     Array.isArray(readings[metric.id]?.history) && readings[metric.id].history.length > 1
   );
@@ -157,7 +172,7 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
             <section className="crew-subpanel">
               <div className="crew-subpanel-heading">
                 <div><span className="crew-section-kicker">CURRENT SNAPSHOT</span><h3>Health metrics</h3></div>
-                <span className="crew-demo-label">CSV SOURCE</span>
+                <span className="crew-demo-label">{hasSimulatedReadings ? "SIMULATED DEMO DATA" : profileSource}</span>
               </div>
               <div className="crew-profile-metrics">
                 {metricDefinitions.map((metric) => {
@@ -172,7 +187,7 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
                   );
                 })}
               </div>
-              <p className="crew-data-note">Readings and location reference ranges come from the supplied CSV datasets; a reference range alone is not a risk assessment.</p>
+              <p className="crew-data-note">Each metric shows its source. Reference ranges and rule-based flags are demonstrations, not clinical assessments.</p>
             </section>
 
             <section className="crew-subpanel">
@@ -407,6 +422,9 @@ export default function CrewOverview() {
   const [severityFilter, setSeverityFilter] = useState("All");
   const [astronautFilter, setAstronautFilter] = useState("All");
   const [crewSearch, setCrewSearch] = useState("");
+  const [environmentFilter, setEnvironmentFilter] = useState("All");
+  const [riskFilter, setRiskFilter] = useState("All");
+  const [crewSort, setCrewSort] = useState("name");
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const lastSync = overview ? new Date() : null;
   const crew = overview?.crew ?? EMPTY_ARRAY;
@@ -437,10 +455,22 @@ export default function CrewOverview() {
   const observationMembers = riskOutlooks.filter((outlook) => outlook.id === "Medium").length;
   const healthyMembers = riskOutlooks.filter((outlook) => outlook.id === "Low").length;
   const unassessedMembers = riskOutlooks.filter((outlook) => outlook.id === "Unknown").length;
-  const selectedCrew = crew.filter((member) => {
-    const search = crewSearch.trim().toLowerCase();
-    return !search || `${member.name} ${member.id} ${member.role}`.toLowerCase().includes(search);
-  });
+  const selectedCrew = crew
+    .filter((member) => {
+      const search = crewSearch.trim().toLowerCase();
+      const matchesSearch = !search || `${member.name} ${member.id} ${member.role}`.toLowerCase().includes(search);
+      return matchesSearch
+        && (environmentFilter === "All" || member.currentLocation === environmentFilter)
+        && (riskFilter === "All" || member.risk === riskFilter);
+    })
+    .sort((first, second) => {
+      if (crewSort === "score") return (second.score ?? -1) - (first.score ?? -1);
+      if (crewSort === "risk") {
+        const order = { Critical: 0, High: 1, Medium: 2, Low: 3, Unknown: 4 };
+        return (order[first.risk] ?? 5) - (order[second.risk] ?? 5) || first.name.localeCompare(second.name);
+      }
+      return first.name.localeCompare(second.name);
+    });
   const filteredAlerts = crewAlerts
     .filter((alert) => severityFilter === "All" || alert.severity === severityFilter)
     .filter((alert) => astronautFilter === "All" || alert.astronautId === astronautFilter)
@@ -462,9 +492,9 @@ export default function CrewOverview() {
           <div className="crew-command-title">
             <span className="app-eyebrow">ASTRA · MISSION HEALTH OPERATIONS</span>
             <h1>Crew Health Command Center</h1>
-            <p>Astronaut profiles and health records loaded from the backend CSV datasets</p>
+            <p>Crew roster with source-labeled measurements and demonstration health history</p>
           </div>
-          <span className="crew-demo-label">CSV DATA</span>
+          <span className="crew-demo-label">{overview.dataMode || "CSV DATA"}</span>
         </header>
         <section className="app-panel" role={error ? "alert" : "status"}>
           {loading && <p>Loading crew and health data from the backend…</p>}
@@ -489,7 +519,7 @@ export default function CrewOverview() {
           <p>Astronaut profiles and health records loaded from the backend CSV datasets</p>
         </div>
         <div className="crew-header-status">
-          <span className="crew-demo-label">CSV DATA</span>
+          <span className="crew-demo-label">{overview.dataMode || "CSV DATA"}</span>
           <StatusPill
             status={unassessedMembers === crew.length ? "unknown" : highRiskMembers > 0 ? "high" : "low"}
             label={unassessedMembers === crew.length ? "Health risk not assessed" : highRiskMembers > 0 ? "Crew attention required" : "Risk engine summary"}
@@ -521,15 +551,42 @@ export default function CrewOverview() {
       <section className="crew-command-section">
         <div className="crew-section-heading">
           <div><span className="crew-section-kicker">PERSONNEL &amp; READINESS</span><h2>Crew roster</h2><p>Open a member profile for their available alerts, sample metrics, and transparent rule summary.</p></div>
-          <label className="crew-search-label">
-            <span className="crew-visually-hidden">Search crew</span>
-            <input type="search" value={crewSearch} onChange={(event) => setCrewSearch(event.target.value)} placeholder="Search name, ID, role" />
-          </label>
+          <div className="crew-roster-filters">
+            <label className="crew-search-label">
+              <span className="crew-visually-hidden">Search crew</span>
+              <input type="search" value={crewSearch} onChange={(event) => setCrewSearch(event.target.value)} placeholder="Search name, ID, role" />
+            </label>
+            <label className="crew-roster-filter">Environment
+              <select value={environmentFilter} onChange={(event) => setEnvironmentFilter(event.target.value)}>
+                <option value="All">All environments</option>
+                {[...new Set(crew.map((member) => member.currentLocation).filter(Boolean))].sort().map((environment) => (
+                  <option key={environment} value={environment}>{environment}</option>
+                ))}
+              </select>
+            </label>
+            <label className="crew-roster-filter">Risk
+              <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
+                <option value="All">All risk levels</option>
+                {riskLevels.map((risk) => <option key={risk.id} value={risk.id}>{risk.label}</option>)}
+              </select>
+            </label>
+            <label className="crew-roster-filter">Sort
+              <select value={crewSort} onChange={(event) => setCrewSort(event.target.value)}>
+                <option value="name">Name</option>
+                <option value="score">Health score · high to low</option>
+                <option value="risk">Risk · highest first</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div className="crew-roster-grid">
           {selectedCrew.map((member) => {
             const active = member.alerts.filter((alert) => alert.status !== "Resolved");
-            const quickMetrics = ["Heart Rate", "Oxygen Saturation", "Sleep Duration"];
+            const quickMetrics = ["Heart Rate", "Oxygen Saturation", "Sleep Duration", "Physical Activity"];
+            const updatedTimes = Object.values(member.readings)
+              .map((reading) => Date.parse(reading.timestamp))
+              .filter(Number.isFinite);
+            const lastUpdated = updatedTimes.length ? new Date(Math.max(...updatedTimes)).toLocaleString() : "Unavailable";
             return (
               <article className="crew-member-card" key={member.id}>
                 <div className="crew-member-head">
@@ -541,8 +598,8 @@ export default function CrewOverview() {
                   <StatusPill status={member.risk.toLowerCase()} label={getRiskLabel(member.risk)} />
                 </div>
                 <div className="crew-member-score">
-                  <div><span>Crew score</span><strong>{member.score ?? "—"}{member.score !== null && <small> / 100</small>}</strong></div>
-                  <div className="crew-score-track" role="img" aria-label={`Illustrative health score ${member.score} out of 100`}>
+                  <div><span>Rule-based demo score</span><strong>{member.score ?? "—"}{member.score !== null && <small> / 100</small>}</strong></div>
+                  <div className="crew-score-track" role="img" aria-label={`Demonstration score ${member.score ?? "not assessed"} out of 100`}>
                     <span style={{ width: `${member.score ?? 0}%` }} />
                   </div>
                 </div>
@@ -555,11 +612,14 @@ export default function CrewOverview() {
                     const metric = metricDefinitions.find((item) => item.parameter === metricName);
                     const reading = member.readings[metricName];
                     const status = getMetricStatus(metric, reading);
-                    return <span key={metricName} title={`${metricName}: ${status.label}`}><i className={`crew-mini-dot crew-status-${status.className}`} />{metricName === "Oxygen Saturation" ? "SpO₂" : metricName === "Sleep Duration" ? "Sleep" : "HR"} <strong>{reading.value ?? "—"}</strong></span>;
+                    const label = metricName === "Oxygen Saturation"
+                      ? "SpO₂"
+                      : metricName === "Sleep Duration" ? "Sleep" : metricName === "Physical Activity" ? "Activity" : "HR";
+                    return <span key={metricName} title={`${metricName}: ${status.label}`}><i className={`crew-mini-dot crew-status-${status.className}`} />{label} <strong>{reading.value ?? "—"}</strong> {reading.value !== null && <small>{reading.unit}</small>}</span>;
                   })}
                 </div>
                 <div className="crew-member-footer">
-                  <span>{active.length} unresolved alert{active.length === 1 ? "" : "s"}</span>
+                  <span>{active.length} active demo alert{active.length === 1 ? "" : "s"} · updated {lastUpdated}</span>
                   <button type="button" className="crew-text-button" onClick={() => openProfile(member.id)}>View profile <span aria-hidden="true">→</span></button>
                 </div>
               </article>
@@ -572,7 +632,7 @@ export default function CrewOverview() {
       <section className="crew-command-section">
         <div className="crew-section-heading">
           <div><span className="crew-section-kicker">CREW VITALS</span><h2>Health monitoring</h2><p>Review source measurements and the risk assessments supplied by the backend.</p></div>
-          <span className="crew-demo-label">CSV MEASUREMENTS + RISK ENGINE</span>
+          <span className="crew-demo-label">{overview.dataMode || "CSV / DEMO DATA"} · RULE-BASED</span>
         </div>
         <div className="crew-metric-selector" role="group" aria-label="Choose a health indicator">
           {metricDefinitions.map((metric) => {

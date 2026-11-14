@@ -16,7 +16,7 @@ const getRiskBand = (score) => {
   return { id: "Low", label: "Lower projected attention", className: "low" };
 };
 
-const makeRiskOutlook = (member) => {
+const makeRiskOutlook = (member, metricDefinitions, generatedWarnings = []) => {
   const drivers = [];
   let score = 0;
   let sampleCount = 0;
@@ -43,12 +43,33 @@ const makeRiskOutlook = (member) => {
     });
   }
 
-  const activeAlerts = member.alerts.filter((alert) => alert.status !== "Resolved");
+  for (const metric of metricDefinitions) {
+    const reading = member.readings[metric.id];
+    if (!reading || reading.value === null || reading.value === undefined
+      || !outsideDemoBand(metric.id, reading.value, reading.referenceBounds)) continue;
+    score += 22;
+    drivers.push({
+      metricId: metric.id,
+      label: `${metric.parameter} is outside its configured demonstration reference range`,
+      points: 22,
+      action: "Verify the source value and consult established mission protocols; this demonstration flag is not a medical assessment.",
+    });
+  }
+
+  const activeAlerts = [
+    ...member.alerts.filter((alert) => alert.status !== "Resolved"),
+    ...generatedWarnings,
+  ];
   const alertContribution = Math.min(
     32,
     activeAlerts.reduce((total, alert) => total + (alertScore[alert.severity] || 0), 0)
   );
   score = Math.min(100, score + alertContribution);
+  const alertRiskFloor = activeAlerts.reduce((floor, alert) => Math.max(
+    floor,
+    { Critical: 70, High: 45, Medium: 20, Low: 0 }[alert.severity] || 0
+  ), 0);
+  score = Math.max(score, alertRiskFloor);
   for (const alert of activeAlerts) {
     drivers.push({
       metricId: alert.parameter,
@@ -119,7 +140,24 @@ const makeTrendInsights = (crew) => {
   });
 };
 
-const outsideDemoBand = (metricId, value) => {
+const outsideDemoBand = (metricId, value, referenceBounds) => {
+  if (metricId === "blood-pressure" && referenceBounds?.systolic && referenceBounds?.diastolic) {
+    const [systolic, diastolic] = String(value).split("/").map(Number);
+    return (Number.isFinite(referenceBounds.systolic.lowerLimit)
+        && systolic < referenceBounds.systolic.lowerLimit)
+      || (Number.isFinite(referenceBounds.systolic.upperLimit)
+        && systolic > referenceBounds.systolic.upperLimit)
+      || (Number.isFinite(referenceBounds.diastolic.lowerLimit)
+        && diastolic < referenceBounds.diastolic.lowerLimit)
+      || (Number.isFinite(referenceBounds.diastolic.upperLimit)
+        && diastolic > referenceBounds.diastolic.upperLimit);
+  }
+  if (referenceBounds
+    && Number.isFinite(referenceBounds.lowerLimit)
+    && Number.isFinite(referenceBounds.upperLimit)
+    && Number.isFinite(Number(value))) {
+    return Number(value) < referenceBounds.lowerLimit || Number(value) > referenceBounds.upperLimit;
+  }
   if (metricId === "heart-rate") return value < 60 || value > 100;
   if (metricId === "blood-pressure") {
     const [systolic, diastolic] = String(value).split("/").map(Number);
@@ -182,9 +220,14 @@ const assessConfirmedReading = (parameter, value) => {
 const makeWarnings = (crew, metricDefinitions) => crew.flatMap((member) => metricDefinitions.flatMap((metric) => {
   const metricId = metric.id;
   const reading = member.readings[metricId];
-  const history = reading.history.map(Number).filter(Number.isFinite);
+  const history = reading.history.filter((value) =>
+    metricId === "blood-pressure"
+      ? /^\d{1,3}\s*\/\s*\d{1,3}$/.test(String(value))
+      : Number.isFinite(Number(value))
+  );
   const latestPair = history.slice(-2);
-  if (latestPair.length < 2 || !latestPair.every((value) => outsideDemoBand(metricId, value))) return [];
+  if (latestPair.length < 2
+    || !latestPair.every((value) => outsideDemoBand(metricId, value, reading.referenceBounds))) return [];
   const matchingAlert = member.alerts.find((alert) =>
     alert.parameter === metric.parameter && alert.status !== "Resolved"
   );
@@ -199,16 +242,25 @@ const makeWarnings = (crew, metricDefinitions) => crew.flatMap((member) => metri
     severity: matchingAlert?.severity || warningSeverity(metricId, latestPair.at(-1)),
     action: matchingAlert?.recommendation || "Verify the sample and follow the applicable mission medical protocol.",
     alertId: matchingAlert?.id || null,
-    timestamp: matchingAlert?.timestamp || null,
+    timestamp: matchingAlert?.timestamp || reading.historyTimestamps?.at(-1) || null,
     sampleCount: latestPair.length,
-    source: matchingAlert ? "Linked to existing demonstration alert" : "Rule-detected from static demonstration history",
+    source: matchingAlert?.source || reading.source || "Rule-detected from demonstration history",
+    simulated: Boolean(reading.simulated),
+    referenceRange: reading.referenceRange || null,
   }];
 }));
 
-const analyzeCrew = (crew, metricDefinitions) => ({
-  riskOutlooks: crew.map(makeRiskOutlook),
-  trendInsights: makeTrendInsights(crew),
-  warnings: makeWarnings(crew, metricDefinitions),
-});
+const analyzeCrew = (crew, metricDefinitions) => {
+  const warnings = makeWarnings(crew, metricDefinitions);
+  return {
+    riskOutlooks: crew.map((member) => makeRiskOutlook(
+      member,
+      metricDefinitions,
+      warnings.filter((warning) => warning.memberId === member.id && !warning.alertId)
+    )),
+    trendInsights: makeTrendInsights(crew),
+    warnings,
+  };
+};
 
 module.exports = { analyzeCrew, assessConfirmedReading };

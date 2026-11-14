@@ -63,7 +63,9 @@ export default function HealthHistory() {
           <h1 id="health-history-title">Health History</h1>
           <p>Review measurements and alerts supplied by the backend CSV data and confirmed reports.</p>
         </div>
-        <span className="app-demo-tag">CSV / HISTORICAL DATA</span>
+        <span className="app-demo-tag">
+          {historyData?.readings?.some((reading) => reading.simulated) ? "SIMULATED / SOURCE HISTORY" : "CSV / HISTORICAL DATA"}
+        </span>
       </header>
       {loading || error ? (
         <section className="app-panel" role={error ? "alert" : "status"}>
@@ -77,6 +79,13 @@ export default function HealthHistory() {
           )}
         </section>
       ) : (
+      <>
+      {historyData?.readings?.some((reading) => reading.simulated) && (
+        <section className="app-panel dashboard-demo-notice" role="note">
+          <strong>SIMULATED DEMO DATA</strong>
+          <span>Generated samples are explicitly labeled and are not actual measurements or live telemetry.</span>
+        </section>
+      )}
       <section className="app-panel">
         <div className="app-section-heading app-history-heading">
           <div><h2>Recorded health events</h2><p>{history.length} of {records.length} records</p></div>
@@ -113,6 +122,7 @@ export default function HealthHistory() {
                 <div><strong>{alert.parameter}</strong><RiskBadge severity={alert.severity} /></div>
                 <p>{alert.message}</p>
                 <span>{alert.astronautName} · {alert.astronautId} · {alert.id}</span>
+                {alert.simulated && <span className="dashboard-demo-record-label">SIMULATED DEMO RECORD</span>}
               </div>
               <div className="app-history-value">
                 <strong>{alert.value} {alert.unit}</strong>
@@ -124,6 +134,7 @@ export default function HealthHistory() {
           {history.length === 0 && <p className="app-empty-state">No matching sample records.</p>}
         </div>
       </section>
+      </>
       )}
       <section className="app-panel health-record-history-panel" aria-labelledby="crew-reports-heading">
         <div className="app-section-heading">

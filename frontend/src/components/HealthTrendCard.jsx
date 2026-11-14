@@ -1,15 +1,27 @@
 const formatValue = (value) =>
-  Number.isInteger(value) ? String(value) : value.toFixed(1);
+  Number.isInteger(value) ? String(value) : Number(value).toFixed(1);
 
 export default function HealthTrendCard({ alert, label }) {
-  const history = Array.isArray(alert?.history)
-    ? alert.history.filter((value) => Number.isFinite(Number(value))).map(Number)
+  const isBloodPressure = alert?.parameter === "Blood Pressure";
+  const chartValue = (value) => {
+    const numeric = isBloodPressure ? Number(String(value).split("/")[0]) : Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  };
+  const samples = Array.isArray(alert?.history)
+    ? alert.history.map((rawValue, index) => ({
+      rawValue,
+      value: chartValue(rawValue),
+      timestamp: alert.historyTimestamps?.[index],
+    })).filter((sample) => Number.isFinite(sample.value))
     : [];
-  const values = history.length > 0
-    ? history
-    : Number.isFinite(Number(alert?.value))
-      ? [Number(alert.value)]
+  const values = samples.length > 0
+    ? samples.map((sample) => sample.value)
+    : chartValue(alert?.value) !== null
+      ? [chartValue(alert.value)]
       : [];
+  const plottedSamples = samples.length > 0
+    ? samples
+    : values.map((value) => ({ rawValue: alert?.value, value, timestamp: alert?.timestamp }));
 
   if (values.length === 0) {
     return (
@@ -27,7 +39,7 @@ export default function HealthTrendCard({ alert, label }) {
   const xFor = (index) => (values.length === 1 ? 180 : 30 + (index / (values.length - 1)) * 300);
   const yFor = (value) => 126 - ((value - min) / range) * 92;
   const points = values.map((value, index) => `${xFor(index)},${yFor(value)}`).join(" ");
-  const unit = alert.unit || "";
+  const unit = isBloodPressure ? "mmHg systolic" : alert.unit || "";
 
   return (
     <article className="app-panel dashboard-trend-card">
@@ -60,19 +72,19 @@ export default function HealthTrendCard({ alert, label }) {
             </text>
           ))}
           {values.length > 1 && <polyline points={points} className="dashboard-chart-line" />}
-          {values.map((value, index) => (
+          {plottedSamples.map((sample, index) => (
             <circle
-              key={`${index}-${value}`}
+              key={`${index}-${sample.value}`}
               cx={xFor(index)}
-              cy={yFor(value)}
+              cy={yFor(sample.value)}
               r="3.5"
               className="dashboard-chart-point"
             >
-              <title>{`Sample ${index + 1}: ${formatValue(value)} ${unit}`}</title>
+              <title>{`${isBloodPressure ? sample.rawValue : formatValue(sample.value)} ${unit} · ${sample.timestamp ? new Date(sample.timestamp).toLocaleString() : `sample ${index + 1}`}`}</title>
             </circle>
           ))}
-          <text x="30" y="151" className="dashboard-chart-axis">First sample</text>
-          <text x="330" y="151" textAnchor="end" className="dashboard-chart-axis">Latest sample</text>
+          <text x="30" y="151" className="dashboard-chart-axis">{plottedSamples[0]?.timestamp ? new Date(plottedSamples[0].timestamp).toLocaleDateString() : "First sample"}</text>
+          <text x="330" y="151" textAnchor="end" className="dashboard-chart-axis">{plottedSamples.at(-1)?.timestamp ? new Date(plottedSamples.at(-1).timestamp).toLocaleDateString() : "Latest sample"}</text>
         </svg>
       </div>
       <div className="dashboard-trend-stats">
@@ -80,7 +92,7 @@ export default function HealthTrendCard({ alert, label }) {
         <span>Mean <strong>{formatValue(mean)} {unit}</strong></span>
         <span>High <strong>{formatValue(max)} {unit}</strong></span>
       </div>
-      <p className="dashboard-trend-note">{alert.source || "Source records"} · sample order follows the supplied data; no threshold assessment is implied.</p>
+      <p className="dashboard-trend-note">{alert.simulated ? "SIMULATED DEMO DATA · " : ""}{alert.source || "Source records"} · {isBloodPressure ? "systolic values shown in the trend" : "sample order follows the supplied data"}; no threshold assessment is implied.</p>
     </article>
   );
 }

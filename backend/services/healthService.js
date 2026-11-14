@@ -1,5 +1,6 @@
 const riskEngine = require("./riskEngine");
 const csvService = require("./csvService");
+const simulationService = require("./simulationService");
 
 let sourceDataPromise;
 let alertRecords;
@@ -12,7 +13,7 @@ const loadSourceData = async () => {
   if (!sourceDataPromise) {
     sourceDataPromise = Promise.resolve().then(() => {
       const { data, errors } = csvService.getAllCSVData();
-      const crew = data.crewInfo.map((row) => {
+      const csvCrew = data.crewInfo.map((row) => {
         const id = row["Astronaut id"]?.trim();
         const thresholds = data.riskThresholds.find((entry) => entry["Astronaut id"]?.trim() === id);
         return {
@@ -27,26 +28,62 @@ const loadSourceData = async () => {
           currentLocation: row["Current location"]?.trim() || null,
           lastCheckup: null,
           riskThresholds: thresholds || null,
+          profileSource: "CSV crew_info.csv",
+          simulated: false,
         };
       }).filter((member) => member.id);
+      const configuredCrewTarget = Number(process.env.ASTRA_DEMO_CREW_COUNT);
+      const demoCrewTarget = Number.isInteger(configuredCrewTarget) && configuredCrewTarget >= 1
+        && configuredCrewTarget <= 100
+        ? configuredCrewTarget
+        : 17;
+      const crew = simulationService.getDemoCrew(csvCrew, Math.max(csvCrew.length, demoCrewTarget));
       const healthData = normalizeHealthReadings(data.healthReadings, crew);
       const environmentBenchmarks = {
         Earth: normalizeBenchmarks(data.nasaEarth, "Earth"),
         ISS: normalizeBenchmarks(data.nasaISS, "ISS"),
         Moon: normalizeBenchmarks(data.nasaLunar, "Moon"),
       };
+      const simulatedRecords = simulationService.generateDemoReadings(
+        crew,
+        metricDefinitions,
+        healthData.records,
+        environmentBenchmarks
+      );
+      if (simulatedRecords.length > 0) {
+        console.warn(
+          `[ASTRA demo data] Added ${simulatedRecords.length} clearly labeled simulated health sample sets; `
+          + `${healthData.records.length} valid CSV health sample sets were available.`
+        );
+      }
+      const mergedHealthData = {
+        ...healthData,
+        records: [...healthData.records, ...simulatedRecords].sort((first, second) =>
+          (Date.parse(first.timestamp) || 0) - (Date.parse(second.timestamp) || 0)
+        ),
+        csvRows: healthData.records.length,
+        simulatedRows: simulatedRecords.length,
+      };
       const datasetStatus = csvService.checkCSVFiles().map((status) => ({
         ...status,
         records: data[status.dataset]?.length ?? 0,
       }));
+      const hasCsvCrew = csvCrew.length > 0;
+      const hasCsvReadings = healthData.records.length > 0;
+      const hasSimulatedData = simulatedRecords.length > 0 || crew.some((member) => member.simulated);
+      const dataMode = hasSimulatedData
+        ? hasCsvCrew || hasCsvReadings ? "MIXED DATA" : "SIMULATED DEMO DATA"
+        : "REAL CSV DATA";
 
       return {
         crew,
-        healthData,
+        healthData: mergedHealthData,
         riskThresholds: data.riskThresholds,
         environmentBenchmarks,
         datasetStatus,
         datasetErrors: errors,
+        dataMode,
+        simulatedRecords,
       };
     });
   }
@@ -194,17 +231,27 @@ const makeMemberReadings = (member, alerts, healthData, environmentBenchmarks) =
     const historyRecords = memberRecords.flatMap((record) =>
       record.measurements
         .filter((measurement) => measurement.parameter === metric.parameter)
-        .map((measurement) => ({ ...measurement, timestamp: record.timestamp }))
+        .map((measurement) => ({
+          ...measurement,
+          timestamp: record.timestamp,
+          source: record.source,
+          simulated: Boolean(record.simulated),
+        }))
     );
     const latest = historyRecords.at(-1);
+    const referenceBounds = [...historyRecords].reverse().find((record) => record.referenceBounds)?.referenceBounds
+      || simulationService.findBenchmarkBounds(metric.parameter, environment);
     const reading = {
       value: latest?.value ?? null,
       unit: latest?.unit || metric.unit,
       history: historyRecords.map((record) => record.value),
+      historyTimestamps: historyRecords.map((record) => record.timestamp),
       timestamp: latest?.timestamp || null,
-      source: latest ? "CSV health_readings.csv" : "No health reading supplied",
+      source: latest?.source || "No health reading supplied",
+      simulated: latest?.simulated || false,
       alert: alert || null,
       referenceRange: null,
+      referenceBounds,
       status: latest ? (alert?.severity || "Available") : "Unavailable",
     };
     readings[metric.id] = reading;
@@ -286,12 +333,14 @@ const buildModel = async () => {
     const member = crew.find((entry) => entry.id === outlook.memberId);
     const hasAssessmentData = outlook.sampleCount > 0
       || member.alerts.some((alert) => alert.status !== "Resolved");
-    return hasAssessmentData ? outlook : {
+    const hasSimulatedReading = Object.values(member.readings).some((reading) => reading.simulated);
+    return hasAssessmentData ? { ...outlook, simulated: hasSimulatedReading } : {
       ...outlook,
       id: "Unknown",
       label: "Not assessed",
       className: "unknown",
       score: null,
+      simulated: hasSimulatedReading,
       explanation: ["Health readings are unavailable; risk cannot be assessed."],
       actions: [],
       method: "Not assessed because no health readings or active alerts are available.",
@@ -316,34 +365,44 @@ const buildModel = async () => {
       status: generatedAlertStatuses.get(id)?.status || "New",
       message: `${warning.parameter} has been outside the configured band for ${warning.sampleCount} consecutive samples.`,
       recommendation: warning.action,
+      referenceRange: warning.referenceRange,
       timestamp: warning.timestamp,
       history: [],
       source: warning.source,
+      simulated: warning.simulated,
       persistentWarning: warning,
     };
   });
   const augmentedAlerts = [...alerts, ...warningsWithoutAlert];
+  const alertsByMember = new Map(crew.map((member) => [
+    member.id,
+    [...member.alerts, ...warningsWithoutAlert.filter((warning) => warning.astronautId === member.id)],
+  ]));
 
   return {
     crew: crew.map((member) => {
       const riskOutlook = riskByMember[member.id];
-      const activeAlerts = member.alerts.filter((alert) => alert.status !== "Resolved");
-      const penalties = { Critical: 35, High: 20, Medium: 10, Low: 3 };
+      const memberAlertRecords = alertsByMember.get(member.id) || member.alerts;
+      const activeAlerts = memberAlertRecords.filter((alert) => alert.status !== "Resolved");
       const severityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
       const risk = activeAlerts.reduce((mostSevere, alert) =>
         (severityOrder[alert.severity] ?? 4) < (severityOrder[mostSevere] ?? 4)
           ? alert.severity
           : mostSevere, riskOutlook.id);
-      const score = activeAlerts.length
-        ? Math.max(20, 100 - activeAlerts.reduce((sum, alert) => sum + (penalties[alert.severity] || 0), 0))
-        : null;
+      const score = riskOutlook.score === null ? null : Math.max(0, 100 - riskOutlook.score);
       return {
         ...member,
+        alerts: memberAlertRecords,
         risk,
         score,
+        scoreSource: riskOutlook.simulated
+          ? "Rule-based demonstration score; not a medical assessment."
+          : "Rule-based score from available records.",
       };
     }),
-    mission: null,
+    mission: source.dataMode === "REAL CSV DATA"
+      ? null
+      : simulationService.getMissionMetadata(),
     healthRecords: clone(healthRecords),
     alerts: augmentedAlerts,
     healthReadings: source.healthData.records.flatMap((record) => {
@@ -355,13 +414,16 @@ const buildModel = async () => {
         value: measurement.value,
         unit: measurement.unit,
         history: member.readings[measurement.parameter].history,
+        historyTimestamps: member.readings[measurement.parameter].historyTimestamps,
         timestamp: record.timestamp,
         source: record.source,
+        simulated: Boolean(record.simulated),
         status: "Available",
         severity: "Unassessed",
         message: "No risk classification was supplied with this measurement.",
         recommendation: null,
         referenceRange: member.readings[measurement.parameter].referenceRange,
+        referenceBounds: measurement.referenceBounds || member.readings[measurement.parameter].referenceBounds,
       }));
     }),
     riskOutlooks,
@@ -381,11 +443,20 @@ const buildModel = async () => {
     datasetStatus: clone(source.datasetStatus),
     datasetErrors: clone(source.datasetErrors),
     healthDataQuality: {
-      rows: source.healthData.records.length,
+      rows: source.healthData.csvRows + source.healthData.simulatedRows,
+      csvRows: source.healthData.csvRows,
+      simulatedRows: source.healthData.simulatedRows,
       skippedRows: source.healthData.skippedRows,
       invalidTimestamps: source.healthData.invalidTimestamps,
     },
-    dataSource: "backend/data CSV files",
+    dataMode: source.dataMode,
+    dataSource: source.dataMode,
+    simulation: {
+      enabled: source.healthData.simulatedRows > 0,
+      source: source.healthData.simulatedRows > 0 ? "SIMULATED DEMO DATA" : null,
+      readingCount: source.healthData.simulatedRows,
+      notice: "Generated readings are demonstrations only; they are not actual astronaut measurements or medical assessments.",
+    },
   };
 };
 

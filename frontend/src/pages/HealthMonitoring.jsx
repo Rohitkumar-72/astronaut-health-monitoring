@@ -40,9 +40,16 @@ export default function HealthMonitoring() {
   const matchingAlerts = [...(data?.history || [])].reverse()
     .filter((alert) => alert.parameter === selectedMetric)
     .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0));
-  const selectedAlert = matchingAlerts[0] || [...readings].reverse()
+  const selectedReading = [...readings].reverse()
     .filter((reading) => reading.parameter === selectedMetric)
     .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0))[0];
+  const selectedAlert = selectedReading
+    ? {
+      ...selectedReading,
+      severity: matchingAlerts[0]?.severity || selectedReading.severity,
+      status: matchingAlerts[0]?.status || selectedReading.status,
+    }
+    : matchingAlerts[0];
 
   return (
     <div className="app-page">
@@ -50,9 +57,9 @@ export default function HealthMonitoring() {
         <div>
           <span className="app-eyebrow">CREW VITALS</span>
           <h1 id="health-monitoring-title">Health Monitoring</h1>
-          <p>Explore measurements, source timestamps, and historical trends supplied by the backend.</p>
+          <p>Explore source-labeled measurements, timestamps, and historical trends supplied by the backend.</p>
         </div>
-        <span className="app-demo-tag">CSV / SOURCE DATA</span>
+        <span className="app-demo-tag">{readings.some((reading) => reading.simulated) ? "SIMULATED / SOURCE DATA" : "CSV / SOURCE DATA"}</span>
       </header>
 
       <section className="app-content-section" aria-labelledby="health-voice-heading">
@@ -78,6 +85,12 @@ export default function HealthMonitoring() {
         </section>
       ) : (
         <>
+      {readings.some((reading) => reading.simulated) && (
+        <section className="app-panel dashboard-demo-notice" role="note">
+          <strong>SIMULATED DEMO DATA</strong>
+          <span>Generated health samples are not actual astronaut measurements, live telemetry, or medical assessments.</span>
+        </section>
+      )}
       <section className="app-content-section">
         <div className="app-section-heading">
           <div><h2>Available health indicators</h2><p>Measurements are shown only when present in the backend CSV or confirmed records; they are not live sensor readings.</p></div>

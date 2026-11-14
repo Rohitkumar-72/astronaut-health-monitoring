@@ -7,6 +7,9 @@ const assistantService = require("../services/assistantService");
 const geminiConfig = require("../config/geminiConfig");
 
 const demoModel = {
+  simulation: {
+    notice: "Simulated backend demonstration data; not live telemetry or a medical record.",
+  },
   healthReadings: [{
     crewId: "AST-001",
     astronautName: "Crew Member",

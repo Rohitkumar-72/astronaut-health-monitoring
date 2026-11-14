@@ -8,6 +8,12 @@ const allowedParameters = new Set(dataService.metricDefinitions.map((metric) => 
 const metricByParameter = new Map(dataService.metricDefinitions.map((metric) => [metric.parameter, metric]));
 const riskMethod = "Rule-based trend and unresolved-alert heuristic; not a trained AI model.";
 const sendData = (res, data, meta = {}) => res.json({ data, meta: { simulated: false, ...meta } });
+const sendModelData = (res, data, model, meta = {}) => sendData(res, data, {
+  source: model.dataSource,
+  dataMode: model.dataMode,
+  simulated: Boolean(model.simulation?.enabled),
+  ...meta,
+});
 
 const asyncRoute = (handler) => (req, res, next) =>
   Promise.resolve(handler(req, res, next)).catch(next);
@@ -95,7 +101,12 @@ router.get("/dashboard/overview", asyncRoute(async (_req, res) => {
     datasetErrors: model.datasetErrors,
     healthDataQuality: model.healthDataQuality,
     dataSource: model.dataSource,
-  }, { source: model.dataSource });
+  }, {
+    source: model.dataSource,
+    dataMode: model.dataMode,
+    simulated: Boolean(model.simulation?.enabled),
+    simulation: model.simulation,
+  });
 }));
 
 router.get("/dashboard/health-summary", asyncRoute(async (_req, res) => {
@@ -116,27 +127,33 @@ router.get("/dashboard/health-summary", asyncRoute(async (_req, res) => {
       : null,
     readingCount: model.healthReadings.length,
     statistics: model.statistics,
-  }, { source: model.dataSource });
+  }, {
+    source: model.dataSource,
+    dataMode: model.dataMode,
+    simulated: Boolean(model.simulation?.enabled),
+  });
 }));
 
 router.get("/dashboard/health-trends", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
   sendData(res, model.healthReadings, {
     source: model.dataSource,
+    dataMode: model.dataMode,
+    simulated: Boolean(model.simulation?.enabled),
     healthDataQuality: model.healthDataQuality,
   });
 }));
 
 router.get("/crew", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
-  sendData(res, model.crew);
+  sendModelData(res, model.crew, model);
 }));
 
 router.get("/crew/:crewId", asyncRoute(async (req, res) => {
   const model = await dataService.getData();
   const member = getCrewMember(model, req.params.crewId);
   if (!member) return res.status(404).json({ error: { code: "CREW_NOT_FOUND", message: "Crew member was not found." } });
-  sendData(res, member);
+  sendModelData(res, member, model);
 }));
 
 router.get("/crew/:crewId/health", asyncRoute(async (req, res) => {
@@ -144,7 +161,7 @@ router.get("/crew/:crewId/health", asyncRoute(async (req, res) => {
   if (!getCrewMember(model, req.params.crewId)) {
     return res.status(404).json({ error: { code: "CREW_NOT_FOUND", message: "Crew member was not found." } });
   }
-  sendData(res, model.healthReadings.filter((reading) => reading.crewId === req.params.crewId));
+  sendModelData(res, model.healthReadings.filter((reading) => reading.crewId === req.params.crewId), model);
 }));
 
 router.get("/crew/:crewId/history", asyncRoute(async (req, res) => {
@@ -152,7 +169,7 @@ router.get("/crew/:crewId/history", asyncRoute(async (req, res) => {
   if (!getCrewMember(model, req.params.crewId)) {
     return res.status(404).json({ error: { code: "CREW_NOT_FOUND", message: "Crew member was not found." } });
   }
-  sendData(res, model.alerts.filter((alert) => alert.astronautId === req.params.crewId));
+  sendModelData(res, model.alerts.filter((alert) => alert.astronautId === req.params.crewId), model);
 }));
 
 router.get("/health/metrics", asyncRoute(async (_req, res) => {
@@ -172,12 +189,15 @@ router.get("/health/trends", asyncRoute(async (req, res) => {
     return res.status(400).json({ error: { code: "INVALID_PARAMETER", message: "parameter does not match a supported health metric." } });
   }
   if (req.query.parameter) readings = readings.filter((reading) => reading.parameter === req.query.parameter);
-  sendData(res, readings, { source: "demonstration histories; timestamps are only supplied for alert records" });
+  sendModelData(res, readings, model, {
+    source: model.dataSource,
+    healthDataQuality: model.healthDataQuality,
+  });
 }));
 
 router.get("/health/history", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
-  sendData(res, model.alerts, { source: "demonstration alert history" });
+  sendModelData(res, model.alerts, model);
 }));
 
 router.get("/health/records", asyncRoute(async (_req, res) => {
@@ -239,7 +259,7 @@ router.get("/health", asyncRoute(async (req, res) => {
     return res.status(400).json({ error: { code: "INVALID_PARAMETER", message: "parameter does not match a supported health metric." } });
   }
   if (req.query.parameter) readings = readings.filter((reading) => reading.parameter === req.query.parameter);
-  sendData(res, readings);
+  sendModelData(res, readings, model);
 }));
 
 router.get("/health/:crewId", asyncRoute(async (req, res) => {
@@ -247,7 +267,7 @@ router.get("/health/:crewId", asyncRoute(async (req, res) => {
   if (!getCrewMember(model, req.params.crewId)) {
     return res.status(404).json({ error: { code: "CREW_NOT_FOUND", message: "Crew member was not found." } });
   }
-  sendData(res, model.healthReadings.filter((reading) => reading.crewId === req.params.crewId));
+  sendModelData(res, model.healthReadings.filter((reading) => reading.crewId === req.params.crewId), model);
 }));
 
 router.get("/alerts", asyncRoute(async (req, res) => {
@@ -264,14 +284,14 @@ router.get("/alerts", asyncRoute(async (req, res) => {
   if (req.query.severity) alerts = alerts.filter((alert) => alert.severity === req.query.severity);
   if (req.query.status) alerts = alerts.filter((alert) => alert.status === req.query.status);
   if (req.query.crewId) alerts = alerts.filter((alert) => alert.astronautId === req.query.crewId);
-  sendData(res, alerts);
+  sendModelData(res, alerts, model);
 }));
 
 router.get("/alerts/:alertId", asyncRoute(async (req, res) => {
   const model = await dataService.getData();
   const alert = model.alerts.find((record) => record.id === req.params.alertId);
   if (!alert) return res.status(404).json({ error: { code: "ALERT_NOT_FOUND", message: "Alert was not found." } });
-  sendData(res, alert);
+  sendModelData(res, alert, model);
 }));
 
 router.patch("/alerts/:alertId", asyncRoute(async (req, res) => {
@@ -281,7 +301,8 @@ router.patch("/alerts/:alertId", asyncRoute(async (req, res) => {
   }
   const alert = await dataService.updateAlertStatus(req.params.alertId, status);
   if (!alert) return res.status(404).json({ error: { code: "ALERT_NOT_FOUND", message: "Alert was not found." } });
-  sendData(res, alert);
+  const model = await dataService.getData();
+  sendModelData(res, alert, model);
 }));
 
 router.post("/alerts", asyncRoute(async (req, res) => {
@@ -310,7 +331,7 @@ router.post("/alerts", asyncRoute(async (req, res) => {
   });
   if (!newAlert) return res.status(400).json({ error: { code: "INVALID_CREW_ID", message: "astronautId does not match a known crew member." } });
   res.status(201);
-  sendData(res, newAlert);
+  sendModelData(res, newAlert, await dataService.getData());
 }));
 
 router.post("/alerts/reset-demo", asyncRoute(async (_req, res) => {
@@ -319,7 +340,7 @@ router.post("/alerts/reset-demo", asyncRoute(async (_req, res) => {
 
 router.get("/risks", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
-  sendData(res, model.riskOutlooks, { method: riskMethod });
+  sendModelData(res, model.riskOutlooks, model, { method: riskMethod });
 }));
 
 router.get("/risks/:crewId", asyncRoute(async (req, res) => {
@@ -327,17 +348,17 @@ router.get("/risks/:crewId", asyncRoute(async (req, res) => {
   if (!getCrewMember(model, req.params.crewId)) {
     return res.status(404).json({ error: { code: "CREW_NOT_FOUND", message: "Crew member was not found." } });
   }
-  sendData(res, model.riskOutlooks.find((risk) => risk.memberId === req.params.crewId), { method: riskMethod });
+  sendModelData(res, model.riskOutlooks.find((risk) => risk.memberId === req.params.crewId), model, { method: riskMethod });
 }));
 
 router.get("/mission/status", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
-  sendData(res, model.mission);
+  sendModelData(res, model.mission, model);
 }));
 
 router.get("/mission", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
-  sendData(res, model.mission);
+  sendModelData(res, model.mission, model);
 }));
 
 module.exports = router;

@@ -134,7 +134,8 @@ function validateExtractionBody(body) {
 
 function buildHealthContext(model) {
   return {
-    dataNotice: "Simulated backend demonstration data; not live telemetry or a medical record.",
+    dataMode: model.dataMode,
+    dataNotice: model.simulation?.notice || "CSV and crew-confirmed data only; no live telemetry is connected.",
     capturedAt: new Date().toISOString(),
     readings: model.healthReadings.map((reading) => ({
       astronautId: reading.crewId,
@@ -144,6 +145,7 @@ function buildHealthContext(model) {
       unit: reading.unit,
       status: reading.status,
       source: reading.source,
+      simulated: Boolean(reading.simulated),
       timestamp: reading.timestamp,
       referenceRange: reading.referenceRange,
     })),
@@ -160,6 +162,7 @@ function buildHealthContext(model) {
         message: alert.message,
         timestamp: alert.timestamp,
         source: alert.source,
+        simulated: Boolean(alert.simulated),
       })),
     confirmedCrewReports: (model.healthRecords || []).slice(0, 40).map((record) => ({
       astronautId: record.astronautId,
