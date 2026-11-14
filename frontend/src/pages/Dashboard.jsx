@@ -7,11 +7,18 @@ import useApiResource from "../hooks/useApiResource";
 
 const metricDefinitions = [
   { parameter: "Heart Rate", label: "Heart rate" },
+  { parameter: "Blood Pressure", label: "Blood pressure" },
   { parameter: "Oxygen Saturation", label: "Oxygen saturation" },
   { parameter: "Body Temperature", label: "Body temperature" },
   { parameter: "Sleep Duration", label: "Sleep duration" },
-  { parameter: "Physical Activity", label: "Physical activity" },
-  { parameter: "Stress Indicator", label: "Stress indicator" },
+  { parameter: "Bone Density", label: "Bone density" },
+  { parameter: "Mood", label: "Mood" },
+  { parameter: "Daily Calorie Intake", label: "Daily calorie intake" },
+  { parameter: "Muscular Endurance Score", label: "Muscular endurance" },
+  { parameter: "Cognitive Reaction Time", label: "Cognitive reaction time" },
+  { parameter: "Hydration Status", label: "Hydration status" },
+  { parameter: "Heart Rate Variability", label: "Heart rate variability" },
+  { parameter: "Cumulative Radiation Dose", label: "Cumulative radiation dose" },
 ];
 
 const severityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
@@ -26,9 +33,10 @@ const newestFirst = (first, second) => dateValue(second.timestamp) - dateValue(f
 const getLatestByMetric = (alerts) => {
   const latest = new Map();
   for (const alert of alerts) {
-    if (!alert?.parameter || !Number.isFinite(Number(alert.value))) continue;
+    if (!alert?.parameter || alert.value === null || alert.value === undefined || alert.value === ""
+      || !Number.isFinite(Number(alert.value))) continue;
     const current = latest.get(alert.parameter);
-    if (!current || dateValue(alert.timestamp) > dateValue(current.timestamp)) {
+    if (!current || dateValue(alert.timestamp) >= dateValue(current.timestamp)) {
       latest.set(alert.parameter, alert);
     }
   }
@@ -161,12 +169,13 @@ function RiskDistribution({ risks, crewCount }) {
     { id: "Medium", label: "Moderate", color: "#f4c65e" },
     { id: "High", label: "High risk", color: "#ff963d" },
     { id: "Critical", label: "Critical", color: "#ff5268" },
+    { id: "Unknown", label: "Not assessed", color: "#71879a" },
   ];
   const counts = levels.map((level) => ({
     ...level,
     count: risks.filter((risk) => risk.id === level.id).length,
   }));
-  const total = counts.reduce((sum, level) => sum + level.count, 0) || crewCount;
+  const total = crewCount;
   let start = 0;
   const stops = counts.map((level) => {
     const percent = total ? (level.count / total) * 100 : 0;
@@ -181,7 +190,7 @@ function RiskDistribution({ risks, crewCount }) {
         <div><span className="dashboard-section-kicker">RULE-BASED OVERVIEW</span><h2>Crew risk distribution</h2></div>
         <Link className="dashboard-section-link" to="/crew-overview">Details <span aria-hidden="true">→</span></Link>
       </div>
-      <p className="dashboard-panel-subtitle">Illustrative bands based on available sample history; not a diagnosis.</p>
+      <p className="dashboard-panel-subtitle">Risk is not assessed when source readings are unavailable.</p>
       <div className="dashboard-risk-content">
         <div className="dashboard-risk-donut" style={{ background: `conic-gradient(${stops.join(", ")})` }}>
           <span><strong>{crewCount}</strong><small>crew</small></span>
@@ -229,7 +238,7 @@ function CrewSnapshot({ crew, readings }) {
                 <span className="dashboard-crew-avatar" aria-hidden="true">{initials}</span>
                 <div>
                   <strong>{member.name || "Crew member"}</strong>
-                  <span>{member.role || member.id}</span>
+                  <span>{member.currentLocation || "Location not supplied"} · {member.missionTitle || "Mission not supplied"}</span>
                 </div>
                 <span className={`dashboard-crew-risk dashboard-crew-risk-${riskClass}`}>
                   {member.risk || "Unclassified"}
@@ -237,7 +246,7 @@ function CrewSnapshot({ crew, readings }) {
               </div>
               <div className="dashboard-crew-score">
                 <span>{member.id}</span>
-                <strong>{Number.isFinite(Number(member.score)) ? `${member.score}` : "—"}<small> / 100</small></strong>
+                <strong>{member.score !== null && Number.isFinite(Number(member.score)) ? `${member.score}` : "—"}{member.score !== null && Number.isFinite(Number(member.score)) && <small> / 100</small>}</strong>
               </div>
               <div className="dashboard-crew-metrics">
                 {latestMetrics.map((reading) => (
@@ -257,6 +266,84 @@ function CrewSnapshot({ crew, readings }) {
   );
 }
 
+function HealthStatistics({ statistics, readingCount }) {
+  return (
+    <section className="app-panel dashboard-readings-panel" aria-labelledby="health-statistics-title">
+      <div className="dashboard-section-heading dashboard-panel-heading">
+        <div>
+          <span className="dashboard-section-kicker">CSV HEALTH RECORDS</span>
+          <h2 id="health-statistics-title">Health statistics</h2>
+          <p>{readingCount} measured parameter records are available in the source dataset.</p>
+        </div>
+      </div>
+      {statistics.length ? (
+        <div className="dashboard-table-wrap">
+          <table className="dashboard-readings-table">
+            <thead><tr><th>Parameter</th><th>Samples</th><th>Average</th><th>Range</th></tr></thead>
+            <tbody>
+              {statistics.map((statistic) => (
+                <tr key={statistic.parameter}>
+                  <td><strong>{statistic.parameter}</strong></td>
+                  <td>{statistic.count}</td>
+                  <td>{Number(statistic.average.toFixed(2))} {statistic.unit}</td>
+                  <td>{statistic.minimum}–{statistic.maximum} {statistic.unit}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="dashboard-no-data">No health measurements are present in health_readings.csv.</p>}
+    </section>
+  );
+}
+
+function EnvironmentBenchmarks({ benchmarks }) {
+  const locations = [
+    { key: "Earth", label: "Earth" },
+    { key: "ISS", label: "International Space Station" },
+    { key: "Moon", label: "Moon" },
+  ];
+  const rows = benchmarks?.Earth || [];
+  const findBenchmark = (location, parameter) =>
+    (benchmarks?.[location] || []).find((item) => item.parameter === parameter);
+
+  return (
+    <section className="app-panel dashboard-readings-panel" aria-labelledby="environment-benchmarks-title">
+      <div className="dashboard-section-heading dashboard-panel-heading">
+        <div>
+          <span className="dashboard-section-kicker">NASA CSV REFERENCE DATA</span>
+          <h2 id="environment-benchmarks-title">Earth · ISS · Moon benchmark ranges</h2>
+          <p>Source-provided reference ranges; not crew measurements or individual risk assessments.</p>
+        </div>
+      </div>
+      {rows.length ? (
+        <div className="dashboard-table-wrap">
+          <table className="dashboard-readings-table">
+            <thead><tr><th>Parameter</th>{locations.map((location) => <th key={location.key}>{location.label}</th>)}</tr></thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.parameter}>
+                  <td><strong>{row.parameter}</strong></td>
+                  {locations.map((location) => {
+                    const benchmark = findBenchmark(location.key, row.parameter);
+                    return (
+                      <td key={location.key}>
+                        {benchmark && benchmark.lowerLimit !== null && benchmark.upperLimit !== null
+                          ? `${benchmark.lowerLimit}–${benchmark.upperLimit}`
+                          : "Unavailable"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="dashboard-no-data">Environmental benchmark data is unavailable.</p>}
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const loadOverview = useCallback(({ signal }) => getDashboardOverview({ signal }), []);
   const { data: overview, error, loading, reload } = useApiResource(loadOverview);
@@ -266,7 +353,8 @@ export default function Dashboard() {
   const risks = overview?.risks || [];
   const healthReadings = overview?.healthReadings || [];
   const sortedAlerts = [...alerts].sort(newestFirst);
-  const latestByMetric = getLatestByMetric(alerts);
+  const sortedRecords = [...healthReadings, ...alerts].sort(newestFirst);
+  const latestByMetric = getLatestByMetric([...healthReadings, ...alerts]);
   const latestHeartRate = latestByMetric.get("Heart Rate");
   const latestOxygen = latestByMetric.get("Oxygen Saturation");
   const activeAlerts = sortedAlerts.filter((alert) => alert.status && alert.status !== "Resolved");
@@ -275,19 +363,15 @@ export default function Dashboard() {
       (severityOrder[first.severity] ?? 4) - (severityOrder[second.severity] ?? 4) || newestFirst(first, second)
     )
     .slice(0, 4);
-  const observationCount = alerts.reduce(
-    (count, alert) => count + (Array.isArray(alert.history)
-      ? alert.history.filter((value) => Number.isFinite(Number(value))).length
-      : Number.isFinite(Number(alert.value)) ? 1 : 0),
-    0
-  );
+  const observationCount = healthReadings.length;
   const validMetrics = metricDefinitions.filter(({ parameter }) => latestByMetric.has(parameter));
   const healthyCrew = risks.filter((risk) => risk.id === "Low").length;
   const observationCrew = risks.filter((risk) => risk.id === "Medium").length;
   const criticalAlerts = activeAlerts.filter((alert) => alert.severity === "Critical").length;
-  const averageScore = crew.length
-    ? Math.round(crew.reduce((sum, member) => sum + (Number(member.score) || 0), 0) / crew.length)
-    : 0;
+  const scoredCrew = crew.filter((member) => member.score !== null && Number.isFinite(Number(member.score)));
+  const averageScore = scoredCrew.length
+    ? Math.round(scoredCrew.reduce((sum, member) => sum + Number(member.score), 0) / scoredCrew.length)
+    : null;
 
   if (loading || error || !overview) {
     return (
@@ -296,7 +380,7 @@ export default function Dashboard() {
           <div>
             <span className="app-eyebrow">ASTRA · MISSION HEALTH</span>
             <h1 id="dashboard-title">Mission Control</h1>
-            <p>Astronaut health intelligence and mission overview · simulated data</p>
+            <p>Crew roster, health records, and mission reference data from the backend CSV datasets</p>
           </div>
           <div className="dashboard-data-source">
             <span className="dashboard-source-dot" />
@@ -342,12 +426,19 @@ export default function Dashboard() {
         <div><small>LAST SYNC</small><strong>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong></div>
       </section>
 
+      {overview.datasetErrors?.length > 0 && (
+        <section className="app-panel" role="status" aria-label="CSV dataset availability">
+          <strong>Some declared CSV datasets are unavailable.</strong>
+          <ul>{overview.datasetErrors.map((datasetError) => <li key={datasetError.dataset}>{datasetError.message}</li>)}</ul>
+        </section>
+      )}
+
       <section className="dashboard-command-stats" aria-label="Crew health summary">
         <article className="dashboard-command-stat"><span className="dashboard-command-icon">◉</span><div><small>Total crew members</small><strong>{crew.length}</strong><span>Mission roster</span></div></article>
-        <article className="dashboard-command-stat dashboard-command-healthy"><span className="dashboard-command-icon">✓</span><div><small>Healthy</small><strong>{healthyCrew}</strong><span>Low illustrative risk</span></div></article>
-        <article className="dashboard-command-stat dashboard-command-watch"><span className="dashboard-command-icon">◷</span><div><small>Under observation</small><strong>{observationCrew}</strong><span>Moderate sample risk</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-healthy"><span className="dashboard-command-icon">✓</span><div><small>Low risk</small><strong>{healthyCrew}</strong><span>Risk engine result</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-watch"><span className="dashboard-command-icon">◷</span><div><small>Under observation</small><strong>{observationCrew}</strong><span>Moderate risk engine result</span></div></article>
         <article className="dashboard-command-stat dashboard-command-critical"><span className="dashboard-command-icon">!</span><div><small>Critical alerts</small><strong>{criticalAlerts}</strong><span>Unresolved records</span></div></article>
-        <article className="dashboard-command-stat dashboard-command-score"><span className="dashboard-command-icon">↗</span><div><small>Average health score</small><strong>{averageScore}<small> / 100</small></strong><span>Rule-based demo summary</span></div></article>
+        <article className="dashboard-command-stat dashboard-command-score"><span className="dashboard-command-icon">↗</span><div><small>Average crew score</small><strong>{averageScore ?? "—"}{averageScore !== null && <small> / 100</small>}</strong><span>{averageScore === null ? "No score data available" : "Based on available alerts"}</span></div></article>
       </section>
 
       <section className="dashboard-intelligence-grid" aria-label="Crew health analytics">
@@ -371,7 +462,7 @@ export default function Dashboard() {
         <article className="dashboard-kpi-card">
           <div className="dashboard-kpi-top"><span>Tracked indicators</span><span className="dashboard-count-icon dashboard-violet-icon" aria-hidden="true">◈</span></div>
           <div className="dashboard-kpi-value-row"><strong>{validMetrics.length}<small> / {metricDefinitions.length}</small></strong></div>
-          <span className="dashboard-kpi-caption">{observationCount} supplied sample observations</span>
+          <span className="dashboard-kpi-caption">{observationCount} CSV measurement records</span>
         </article>
       </section>
 
@@ -380,7 +471,7 @@ export default function Dashboard() {
           <div>
             <span className="dashboard-section-kicker">OBSERVATION HISTORY</span>
             <h2>Health trends</h2>
-            <p>Historical samples from the included alert records. Exact sample times and configured thresholds are unavailable.</p>
+            <p>Timestamped health records supplied by health_readings.csv.</p>
           </div>
           <Link className="dashboard-section-link" to="/health-monitoring">Open health monitoring <span aria-hidden="true">→</span></Link>
         </div>
@@ -398,13 +489,16 @@ export default function Dashboard() {
 
       <CrewSnapshot crew={crew} readings={healthReadings} />
 
+      <HealthStatistics statistics={overview.statistics || []} readingCount={healthReadings.length} />
+      <EnvironmentBenchmarks benchmarks={overview.environmentBenchmarks} />
+
       <section className="dashboard-bottom-grid">
         <section className="app-panel dashboard-alerts-panel">
           <div className="dashboard-section-heading dashboard-panel-heading">
             <div>
               <span className="dashboard-section-kicker">EXISTING RISK FLAGS</span>
               <h2>Priority alerts</h2>
-              <p>Severity and reason as provided in the demonstration records.</p>
+              <p>Severity and reason from the backend risk analysis.</p>
             </div>
             <Link className="dashboard-section-link" to="/risk-alerts">All alerts <span aria-hidden="true">→</span></Link>
           </div>
@@ -419,7 +513,7 @@ export default function Dashboard() {
             <div>
               <span className="dashboard-section-kicker">RECENT RECORDS</span>
               <h2>Health readings</h2>
-              <p>Latest alert observations, not a complete sensor stream.</p>
+              <p>Latest imported measurements and health alerts.</p>
             </div>
             <Link className="dashboard-section-link" to="/health-history">History <span aria-hidden="true">→</span></Link>
           </div>
@@ -429,7 +523,7 @@ export default function Dashboard() {
                 <tr><th>Observation</th><th>Reading</th><th>Status</th></tr>
               </thead>
               <tbody>
-                {sortedAlerts.slice(0, 6).map((alert) => (
+                {sortedRecords.slice(0, 6).map((alert) => (
                   <tr key={alert.id}>
                     <td>
                       <strong>{alert.parameter}</strong>
@@ -439,7 +533,7 @@ export default function Dashboard() {
                     <td><RiskBadge severity={alert.severity} status={alert.status} /></td>
                   </tr>
                 ))}
-                {sortedAlerts.length === 0 && (
+                {sortedRecords.length === 0 && (
                   <tr><td colSpan="3" className="dashboard-no-data">No data available.</td></tr>
                 )}
               </tbody>
@@ -449,7 +543,7 @@ export default function Dashboard() {
       </section>
 
       <p className="app-data-disclaimer">
-        Demonstration data only. This dashboard is not live telemetry, a medical record, a diagnostic system, or medical guidance.
+        No live telemetry is connected. Health measurements and benchmark data are displayed only when supplied in the source CSVs; unavailable data is not treated as normal.
       </p>
     </div>
   );
