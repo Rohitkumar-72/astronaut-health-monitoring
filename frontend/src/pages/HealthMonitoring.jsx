@@ -6,7 +6,24 @@ import RiskBadge from "../components/RiskBadge";
 import { getHealthHistory, getHealthReadings } from "../services/api";
 import useApiResource from "../hooks/useApiResource";
 
-const metricOptions = ["Heart Rate", "Blood Pressure", "Oxygen Saturation", "Body Temperature", "Respiratory Rate", "Sleep Duration", "Physical Activity", "Stress Indicator"];
+const metricOptions = [
+  "Heart Rate",
+  "Blood Pressure",
+  "Oxygen Saturation",
+  "Body Temperature",
+  "Respiratory Rate",
+  "Sleep Duration",
+  "Physical Activity",
+  "Stress Indicator",
+  "Bone Density",
+  "Mood",
+  "Daily Calorie Intake",
+  "Muscular Endurance Score",
+  "Cognitive Reaction Time",
+  "Hydration Status",
+  "Heart Rate Variability",
+  "Cumulative Radiation Dose",
+];
 
 export default function HealthMonitoring() {
   const loadHealthData = useCallback(async ({ signal }) => {
@@ -19,10 +36,13 @@ export default function HealthMonitoring() {
   const { data, error, loading, reload } = useApiResource(loadHealthData);
   const [selectedMetric, setSelectedMetric] = useState(metricOptions[0]);
   const readings = data?.readings || [];
-  const matchingAlerts = (data?.history || [])
+  const availableMetrics = [...new Set([...metricOptions, ...readings.map((reading) => reading.parameter)])];
+  const matchingAlerts = [...(data?.history || [])].reverse()
     .filter((alert) => alert.parameter === selectedMetric)
     .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0));
-  const selectedAlert = matchingAlerts[0] || readings.find((reading) => reading.parameter === selectedMetric);
+  const selectedAlert = matchingAlerts[0] || [...readings].reverse()
+    .filter((reading) => reading.parameter === selectedMetric)
+    .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0))[0];
 
   return (
     <div className="app-page">
@@ -30,9 +50,9 @@ export default function HealthMonitoring() {
         <div>
           <span className="app-eyebrow">CREW VITALS</span>
           <h1 id="health-monitoring-title">Health Monitoring</h1>
-          <p>Explore health readings and sample trends returned by the backend.</p>
+          <p>Explore measurements, source timestamps, and historical trends supplied by the backend.</p>
         </div>
-        <span className="app-demo-tag">SIMULATED / HISTORICAL DATA</span>
+        <span className="app-demo-tag">CSV / SOURCE DATA</span>
       </header>
 
       <section className="app-content-section" aria-labelledby="health-voice-heading">
@@ -60,18 +80,18 @@ export default function HealthMonitoring() {
         <>
       <section className="app-content-section">
         <div className="app-section-heading">
-          <div><h2>Available health indicators</h2><p>Values are supplied by the backend demonstration dataset; they are not live sensor readings.</p></div>
+          <div><h2>Available health indicators</h2><p>Measurements are shown only when present in the backend CSV or confirmed records; they are not live sensor readings.</p></div>
         </div>
         <HealthCards alerts={readings} />
       </section>
 
       <section className="app-panel app-monitor-panel">
         <div className="app-section-heading app-monitor-heading">
-          <div><h2>Metric history</h2><p>Sample history associated with the selected alert.</p></div>
+          <div><h2>Metric history</h2><p>Source history associated with the selected measurement or alert.</p></div>
           <label className="app-select-label">
             Metric
             <select value={selectedMetric} onChange={(event) => setSelectedMetric(event.target.value)}>
-              {metricOptions.map((metric) => <option key={metric} value={metric}>{metric}</option>)}
+              {availableMetrics.map((metric) => <option key={metric} value={metric}>{metric}</option>)}
             </select>
           </label>
         </div>
@@ -88,7 +108,7 @@ export default function HealthMonitoring() {
           <p className="app-empty-state">No sample data is available for {selectedMetric}.</p>
         )}
       </section>
-      <p className="app-data-disclaimer">No live sensors are connected. These backend-served simulated readings and historical samples are not medical guidance.</p>
+      <p className="app-data-disclaimer">No live sensors are connected. Source readings and historical samples are informational, not medical guidance.</p>
         </>
       )}
     </div>

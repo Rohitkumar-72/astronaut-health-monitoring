@@ -34,7 +34,7 @@ export default function HealthChart({ alert, title = "Reading history" }) {
         <div>
           <h2>{title}</h2>
           <p>
-            {alert.parameter} · {alert.astronautName} · demonstration samples
+            {alert.parameter} · {alert.astronautName} · {alert.source || "source records"}
           </p>
         </div>
         <span className="app-chart-current">
@@ -46,7 +46,7 @@ export default function HealthChart({ alert, title = "Reading history" }) {
           className="app-health-chart"
           viewBox="0 0 100 100"
           role="img"
-          aria-label={`${alert.parameter} historical demonstration readings`}
+          aria-label={`${alert.parameter} historical source readings`}
           preserveAspectRatio="none"
         >
           {[22, 43, 64, 85].map((y) => (
@@ -64,7 +64,7 @@ export default function HealthChart({ alert, title = "Reading history" }) {
         </div>
       </div>
       <p className="app-chart-note">
-        Sample values supplied with the demonstration alert; not live sensor data.
+        Sample order follows the source records. Exact timestamps are shown where provided; no live sensor feed is connected.
       </p>
     </section>
   );

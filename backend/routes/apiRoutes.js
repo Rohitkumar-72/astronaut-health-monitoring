@@ -7,7 +7,7 @@ const alertSeverities = ["Critical", "High", "Medium", "Low"];
 const allowedParameters = new Set(dataService.metricDefinitions.map((metric) => metric.parameter));
 const metricByParameter = new Map(dataService.metricDefinitions.map((metric) => [metric.parameter, metric]));
 const riskMethod = "Rule-based trend and unresolved-alert heuristic; not a trained AI model.";
-const sendData = (res, data, meta = {}) => res.json({ data, meta: { simulated: true, ...meta } });
+const sendData = (res, data, meta = {}) => res.json({ data, meta: { simulated: false, ...meta } });
 
 const asyncRoute = (handler) => (req, res, next) =>
   Promise.resolve(handler(req, res, next)).catch(next);
@@ -88,7 +88,14 @@ router.get("/dashboard/overview", asyncRoute(async (_req, res) => {
     risks: model.riskOutlooks,
     trendInsights: model.trendInsights,
     persistentWarnings: model.persistentWarnings,
-  }, { source: "shared demonstration dataset" });
+    statistics: model.statistics,
+    environmentBenchmarks: model.environmentBenchmarks,
+    riskThresholds: model.riskThresholds,
+    datasetStatus: model.datasetStatus,
+    datasetErrors: model.datasetErrors,
+    healthDataQuality: model.healthDataQuality,
+    dataSource: model.dataSource,
+  }, { source: model.dataSource });
 }));
 
 router.get("/dashboard/health-summary", asyncRoute(async (_req, res) => {
@@ -98,17 +105,26 @@ router.get("/dashboard/health-summary", asyncRoute(async (_req, res) => {
     risk,
     model.riskOutlooks.filter((entry) => entry.id === risk).length,
   ]));
+  const scoredCrew = model.crew.filter((member) => Number.isFinite(member.score));
   sendData(res, {
     totalCrew: model.crew.length,
     riskCounts,
+    unassessedCrew: model.riskOutlooks.filter((entry) => entry.id === "Unknown").length,
     criticalAlerts: activeAlerts.filter((alert) => alert.severity === "Critical").length,
-    averageHealthScore: Math.round(model.crew.reduce((sum, member) => sum + member.score, 0) / model.crew.length),
-  }, { source: "rule-based summary of demonstration data" });
+    averageHealthScore: scoredCrew.length
+      ? Math.round(scoredCrew.reduce((sum, member) => sum + member.score, 0) / scoredCrew.length)
+      : null,
+    readingCount: model.healthReadings.length,
+    statistics: model.statistics,
+  }, { source: model.dataSource });
 }));
 
 router.get("/dashboard/health-trends", asyncRoute(async (_req, res) => {
   const model = await dataService.getData();
-  sendData(res, model.healthReadings, { source: "demonstration histories; sample timestamps unavailable" });
+  sendData(res, model.healthReadings, {
+    source: model.dataSource,
+    healthDataQuality: model.healthDataQuality,
+  });
 }));
 
 router.get("/crew", asyncRoute(async (_req, res) => {

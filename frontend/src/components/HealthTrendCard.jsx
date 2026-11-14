@@ -33,7 +33,7 @@ export default function HealthTrendCard({ alert, label }) {
     <article className="app-panel dashboard-trend-card">
       <div className="dashboard-trend-heading">
         <div>
-          <span className="dashboard-trend-kicker">SAMPLE TREND</span>
+          <span className="dashboard-trend-kicker">SOURCE HISTORY</span>
           <h3>{label}</h3>
         </div>
         <span className={`dashboard-trend-severity app-risk-${String(alert.severity || "unknown").toLowerCase()}`}>
@@ -80,7 +80,7 @@ export default function HealthTrendCard({ alert, label }) {
         <span>Mean <strong>{formatValue(mean)} {unit}</strong></span>
         <span>High <strong>{formatValue(max)} {unit}</strong></span>
       </div>
-      <p className="dashboard-trend-note">Sample order only; timestamps and threshold lines are not available.</p>
+      <p className="dashboard-trend-note">{alert.source || "Source records"} · sample order follows the supplied data; no threshold assessment is implied.</p>
     </article>
   );
 }

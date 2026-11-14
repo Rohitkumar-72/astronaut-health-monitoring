@@ -1,4 +1,5 @@
 const riskEngine = require("./riskEngine");
+const csvService = require("./csvService");
 
 let sourceDataPromise;
 let alertRecords;
@@ -9,14 +10,45 @@ const generatedAlertStatuses = new Map();
 
 const loadSourceData = async () => {
   if (!sourceDataPromise) {
-    sourceDataPromise = Promise.all([
-      import("../../shared/demoHealthData.mjs"),
-      import("../../shared/crewOverviewDemoData.mjs"),
-    ]).then(([health, crew]) => ({
-      alerts: health.demoHealthData,
-      crew: crew.demoCrew,
-      mission: crew.demoMission,
-    }));
+    sourceDataPromise = Promise.resolve().then(() => {
+      const { data, errors } = csvService.getAllCSVData();
+      const crew = data.crewInfo.map((row) => {
+        const id = row["Astronaut id"]?.trim();
+        const thresholds = data.riskThresholds.find((entry) => entry["Astronaut id"]?.trim() === id);
+        return {
+          id,
+          name: row.Name?.trim() || "Name unavailable",
+          role: "Role not listed in crew_info.csv",
+          age: null,
+          yearOfBirth: row.Year_of_birth?.trim() || null,
+          sex: row.Sex?.trim() || null,
+          yearOfMission: row.Year_of_mission?.trim() || null,
+          missionTitle: row.Mission_title?.trim() || null,
+          currentLocation: row["Current location"]?.trim() || null,
+          lastCheckup: null,
+          riskThresholds: thresholds || null,
+        };
+      }).filter((member) => member.id);
+      const healthData = normalizeHealthReadings(data.healthReadings, crew);
+      const environmentBenchmarks = {
+        Earth: normalizeBenchmarks(data.nasaEarth, "Earth"),
+        ISS: normalizeBenchmarks(data.nasaISS, "ISS"),
+        Moon: normalizeBenchmarks(data.nasaLunar, "Moon"),
+      };
+      const datasetStatus = csvService.checkCSVFiles().map((status) => ({
+        ...status,
+        records: data[status.dataset]?.length ?? 0,
+      }));
+
+      return {
+        crew,
+        healthData,
+        riskThresholds: data.riskThresholds,
+        environmentBenchmarks,
+        datasetStatus,
+        datasetErrors: errors,
+      };
+    });
   }
 
   return sourceDataPromise;
@@ -33,73 +65,242 @@ const metricDefinitions = [
   { id: "sleep-duration", parameter: "Sleep Duration", unit: "hours", range: "7–9 hours" },
   { id: "stress-indicator", parameter: "Stress Indicator", unit: "%", range: "<60% demo band" },
   { id: "physical-activity", parameter: "Physical Activity", unit: "%", range: "≥40% demo target" },
+  { id: "bone-density", parameter: "Bone Density", unit: "T-score", range: null },
+  { id: "mood", parameter: "Mood", unit: "score (unit not specified)", range: null },
+  { id: "daily-calorie-intake", parameter: "Daily Calorie Intake", unit: "kcal/day", range: null },
+  { id: "muscular-endurance", parameter: "Muscular Endurance Score", unit: "kg", range: null },
+  { id: "cognitive-reaction-time", parameter: "Cognitive Reaction Time", unit: "ms", range: null },
+  { id: "hydration-status", parameter: "Hydration Status", unit: "unit not specified", range: null },
+  { id: "heart-rate-variability", parameter: "Heart Rate Variability", unit: "unit not specified", range: null },
+  { id: "cumulative-radiation-dose", parameter: "Cumulative Radiation Dose", unit: "mSv per 6 months", range: null },
 ];
 
-const getReadingStatus = (metric, reading) => {
-  const alertSeverity = reading.alert?.severity;
-  if (alertSeverity) return alertSeverity;
-  const value = Number(reading.value);
+const csvMeasurementFields = [
+  { parameter: "Oxygen Saturation", column: "SpO2(percent)", unit: "%" },
+  { parameter: "Bone Density", column: "Bone density(T score)", unit: "T-score" },
+  { parameter: "Heart Rate", column: "Heart Rate(bpm)", unit: "BPM" },
+  { parameter: "Body Temperature", column: "Body Temperature(degree celsius)", unit: "°C" },
+  { parameter: "Sleep Duration", column: "Daily Sleep Hours(hours)", unit: "hours" },
+  { parameter: "Mood", column: "Mood", unit: "score (unit not specified)" },
+  { parameter: "Daily Calorie Intake", column: "Daily Calorie Intake( kcal per day)", unit: "kcal/day" },
+  { parameter: "Muscular Endurance Score", column: "Muscular Endurance Score( in kg)", unit: "kg" },
+  { parameter: "Cognitive Reaction Time", column: "Cognitive Reaction time(ms)", unit: "ms" },
+  { parameter: "Hydration Status", column: "Hydration Status", unit: "unit not specified" },
+  { parameter: "Heart Rate Variability", column: "Heart Rate Variability (HRV)", unit: "unit not specified" },
+  { parameter: "Cumulative Radiation Dose", column: "Cumulative Radiation Dose(mSv per 6 months)", unit: "mSv per 6 months" },
+];
 
-  switch (metric.id) {
-    case "heart-rate":
-      return value < 60 || value > 100 ? "Moderate" : "Healthy";
-    case "blood-pressure": {
-      const [systolic, diastolic] = String(reading.value).split("/").map(Number);
-      return systolic >= 130 || diastolic >= 80 || systolic < 90 ? "Moderate" : "Healthy";
-    }
-    case "oxygen-saturation":
-      return value < 95 ? "High" : "Healthy";
-    case "body-temperature":
-      return value < 36.1 || value > 37.5 ? "High" : "Healthy";
-    case "respiratory-rate":
-      return value < 12 || value > 20 ? "Moderate" : "Healthy";
-    case "sleep-duration":
-      return value < 5 ? "High" : value < 7 || value > 9 ? "Moderate" : "Healthy";
-    case "stress-indicator":
-      return value >= 75 ? "High" : value >= 60 ? "Moderate" : "Healthy";
-    case "physical-activity":
-      return value < 25 ? "High" : value < 40 ? "Moderate" : "Healthy";
-    default:
-      return "Unknown";
-  }
+const numericValue = (value) => {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim().replace(/,/g, "");
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
 };
 
-const makeMemberReadings = (member, alerts) => {
+const textValue = (value) => typeof value === "string"
+  ? value.trim()
+  : typeof value === "number" && Number.isFinite(value)
+    ? String(value)
+    : "";
+
+const normalizeHealthReadings = (rows, crew) => {
+  const knownCrewIds = new Set(crew.map((member) => member.id));
+  const records = [];
+  let skippedRows = 0;
+  let invalidTimestamps = 0;
+
+  for (const [index, row] of rows.entries()) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      skippedRows += 1;
+      continue;
+    }
+    const astronautId = textValue(row["Astronaut id"]);
+    if (!astronautId || !knownCrewIds.has(astronautId)) {
+      skippedRows += 1;
+      continue;
+    }
+
+    const measurements = [];
+    const systolic = numericValue(row["Systolic blood pressure(mm Hg)"]);
+    const diastolic = numericValue(row["Diastolic blood pressure(mm Hg)"]);
+    if (systolic !== null && diastolic !== null) {
+      measurements.push({
+        parameter: "Blood Pressure",
+        value: `${systolic}/${diastolic}`,
+        unit: "mmHg",
+      });
+    }
+    for (const field of csvMeasurementFields) {
+      const rawValue = textValue(row[field.column]);
+      const value = field.parameter === "Mood" && rawValue ? rawValue : numericValue(rawValue);
+      if (value !== null) measurements.push({ parameter: field.parameter, value, unit: field.unit });
+    }
+    if (!measurements.length) {
+      skippedRows += 1;
+      continue;
+    }
+
+    const timestamp = textValue(row.Timestamp) || null;
+    const validTimestamp = timestamp && Number.isFinite(Date.parse(timestamp));
+    if (timestamp && !validTimestamp) invalidTimestamps += 1;
+    records.push({
+      astronautId,
+      timestamp: validTimestamp ? timestamp : null,
+      sourceIndex: index,
+      source: "CSV health_readings.csv",
+      measurements,
+    });
+  }
+
+  records.sort((first, second) =>
+    (Date.parse(first.timestamp) || 0) - (Date.parse(second.timestamp) || 0)
+    || first.sourceIndex - second.sourceIndex
+  );
+  return { records, skippedRows, invalidTimestamps };
+};
+
+const numericBenchmark = (value) => numericValue(value);
+
+const normalizeBenchmarks = (rows, location) => rows.map((row) => {
+  const lowerKey = ["Lower limit for normal range", "Limit for lower range"]
+    .find((key) => Object.hasOwn(row, key));
+  const upperKey = ["Higher limit for normal range", "Limit for higher range"]
+    .find((key) => Object.hasOwn(row, key));
+  const lowerDeviationKey = ["Deviation permissible lower limit", "Deviations permissible lower"]
+    .find((key) => Object.hasOwn(row, key));
+  const upperDeviationKey = ["Deviation permissible upper limit", "Deviation permissible higher"]
+    .find((key) => Object.hasOwn(row, key));
+  return {
+    location,
+    parameter: row.Benchmarks?.trim() || "Unknown parameter",
+    lowerLimit: lowerKey ? numericBenchmark(row[lowerKey]) : null,
+    upperLimit: upperKey ? numericBenchmark(row[upperKey]) : null,
+    permissibleLowerDeviation: lowerDeviationKey ? numericBenchmark(row[lowerDeviationKey]) : null,
+    permissibleUpperDeviation: upperDeviationKey ? numericBenchmark(row[upperDeviationKey]) : null,
+    reasonsForLowerDeviation: row["Reasons for lower deviation"]?.trim() || null,
+    reasonsForHigherDeviation: row["Reasons for higher deviation"]?.trim() || null,
+    countermeasuresForLowerDeviation: row["Countermeasures for lower deviation"]?.trim() || null,
+    countermeasuresForHigherDeviation: row["Countermeasures for higher deviation"]?.trim() || null,
+  };
+});
+
+const makeMemberReadings = (member, alerts, healthData, environmentBenchmarks) => {
   const readings = {};
+  const memberRecords = healthData.records.filter((record) => record.astronautId === member.id);
+  const environment = environmentBenchmarks[member.currentLocation];
   for (const metric of metricDefinitions) {
-    const source = member.metrics[metric.parameter];
     const alert = alerts.find((record) => record.parameter === metric.parameter);
+    const historyRecords = memberRecords.flatMap((record) =>
+      record.measurements
+        .filter((measurement) => measurement.parameter === metric.parameter)
+        .map((measurement) => ({ ...measurement, timestamp: record.timestamp }))
+    );
+    const latest = historyRecords.at(-1);
     const reading = {
-      value: alert?.value ?? source?.value,
-      unit: alert?.unit || source?.unit || metric.unit,
-      history: alert?.history || source?.history || [],
-      timestamp: alert?.timestamp || null,
-      source: alert ? "Historical demonstration alert" : "Simulated demonstration snapshot",
+      value: latest?.value ?? null,
+      unit: latest?.unit || metric.unit,
+      history: historyRecords.map((record) => record.value),
+      timestamp: latest?.timestamp || null,
+      source: latest ? "CSV health_readings.csv" : "No health reading supplied",
       alert: alert || null,
-      referenceRange: metric.range,
+      referenceRange: null,
+      status: latest ? (alert?.severity || "Available") : "Unavailable",
     };
-    reading.status = getReadingStatus(metric, reading);
     readings[metric.id] = reading;
     readings[metric.parameter] = reading;
+  }
+
+  const benchmarkNames = {
+    "Blood Pressure": ["Systolic blood pressure", "Diastolic blood pressure"],
+    "Oxygen Saturation": ["SpO2(percent)"],
+    "Bone Density": ["Bone density(T score)"],
+    "Heart Rate": ["Heart Rate(bpm)"],
+    "Body Temperature": ["Body Temperature(degree celsius)"],
+    "Sleep Duration": ["Daily Sleep Hours(hours)"],
+    "Mood": ["Mood"],
+    "Daily Calorie Intake": ["Daily Calorie Intake"],
+    "Muscular Endurance Score": ["Muscular Endurance Score"],
+    "Cognitive Reaction Time": ["Cognitive Reaction time"],
+    "Hydration Status": ["Hydration Status"],
+    "Heart Rate Variability": ["Heart Rate Variability"],
+    "Cumulative Radiation Dose": ["Cumulative Radiation Dose"],
+  };
+  for (const metric of metricDefinitions) {
+    const reading = readings[metric.id];
+    if (!reading) continue;
+    const matches = environment?.filter((entry) =>
+      (benchmarkNames[metric.parameter] || []).some((name) => entry.parameter.startsWith(name))
+    ) || [];
+    if (matches.length) {
+      reading.referenceRange = matches.map((entry) =>
+        entry.lowerLimit !== null && entry.upperLimit !== null
+          ? `${entry.parameter}: ${entry.lowerLimit}–${entry.upperLimit}`
+          : null
+      ).filter(Boolean).join("; ") || null;
+    } else {
+      reading.referenceRange = metric.range || null;
+    }
   }
   return readings;
 };
 
+const summarizeReadings = (readings) => {
+  const groups = new Map();
+  const add = (parameter, unit, value) => {
+    const key = `${parameter}\u0000${unit}`;
+    const group = groups.get(key) || { parameter, unit, values: [] };
+    group.values.push(value);
+    groups.set(key, group);
+  };
+  for (const reading of readings) {
+    if (reading.parameter === "Blood Pressure" && typeof reading.value === "string") {
+      const [systolic, diastolic] = reading.value.split("/").map(numericValue);
+      if (systolic !== null) add("Systolic blood pressure", "mmHg", systolic);
+      if (diastolic !== null) add("Diastolic blood pressure", "mmHg", diastolic);
+    } else if (typeof reading.value === "number" && Number.isFinite(reading.value)) {
+      add(reading.parameter, reading.unit, reading.value);
+    }
+  }
+  return [...groups.values()].map(({ parameter, unit, values }) => ({
+    parameter,
+    unit,
+    count: values.length,
+    average: values.reduce((sum, value) => sum + value, 0) / values.length,
+    minimum: Math.min(...values),
+    maximum: Math.max(...values),
+  }));
+};
+
 const buildModel = async () => {
   const source = await loadSourceData();
-  if (!alertRecords) alertRecords = clone(source.alerts);
+  if (!alertRecords) alertRecords = [];
   const crew = source.crew.map((sourceMember) => {
     const alerts = alertRecords.filter((alert) => alert.astronautId === sourceMember.id);
-    const readings = makeMemberReadings(sourceMember, alerts);
+    const readings = makeMemberReadings(sourceMember, alerts, source.healthData, source.environmentBenchmarks);
     return { ...clone(sourceMember), alerts, readings };
   });
   const analysis = riskEngine.analyzeCrew(crew, metricDefinitions);
-  const { riskOutlooks, trendInsights, warnings } = analysis;
+  const { trendInsights, warnings } = analysis;
+  const riskOutlooks = analysis.riskOutlooks.map((outlook) => {
+    const member = crew.find((entry) => entry.id === outlook.memberId);
+    const hasAssessmentData = outlook.sampleCount > 0
+      || member.alerts.some((alert) => alert.status !== "Resolved");
+    return hasAssessmentData ? outlook : {
+      ...outlook,
+      id: "Unknown",
+      label: "Not assessed",
+      className: "unknown",
+      score: null,
+      explanation: ["Health readings are unavailable; risk cannot be assessed."],
+      actions: [],
+      method: "Not assessed because no health readings or active alerts are available.",
+    };
+  });
   const riskByMember = Object.fromEntries(riskOutlooks.map((risk) => [risk.memberId, risk]));
   const warningsByAlert = new Map(warnings.filter((warning) => warning.alertId).map((warning) => [warning.alertId, warning]));
   const alerts = alertRecords.map((alert) => ({
     ...alert,
-    source: "Simulated demonstration alert record",
     persistentWarning: warningsByAlert.get(alert.id) || null,
   }));
   const warningsWithoutAlert = warnings.filter((warning) => !warning.alertId).map((warning) => {
@@ -113,7 +314,7 @@ const buildModel = async () => {
       unit: warning.unit,
       severity: warning.severity,
       status: generatedAlertStatuses.get(id)?.status || "New",
-      message: `${warning.parameter} has been outside its illustrative demo band for ${warning.sampleCount} consecutive samples.`,
+      message: `${warning.parameter} has been outside the configured band for ${warning.sampleCount} consecutive samples.`,
       recommendation: warning.action,
       timestamp: warning.timestamp,
       history: [],
@@ -128,41 +329,63 @@ const buildModel = async () => {
       const riskOutlook = riskByMember[member.id];
       const activeAlerts = member.alerts.filter((alert) => alert.status !== "Resolved");
       const penalties = { Critical: 35, High: 20, Medium: 10, Low: 3 };
+      const severityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      const risk = activeAlerts.reduce((mostSevere, alert) =>
+        (severityOrder[alert.severity] ?? 4) < (severityOrder[mostSevere] ?? 4)
+          ? alert.severity
+          : mostSevere, riskOutlook.id);
+      const score = activeAlerts.length
+        ? Math.max(20, 100 - activeAlerts.reduce((sum, alert) => sum + (penalties[alert.severity] || 0), 0))
+        : null;
       return {
         ...member,
-        risk: member.alerts.filter((alert) => alert.status !== "Resolved").reduce((mostSevere, alert) => {
-          const severityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-          return (severityOrder[alert.severity] ?? 4) < (severityOrder[mostSevere] ?? 4)
-            ? alert.severity
-            : mostSevere;
-        }, "Low"),
-        score: Math.max(20, 100 - activeAlerts.reduce((sum, alert) => sum + (penalties[alert.severity] || 0), 0)),
+        risk,
+        score,
       };
     }),
-    mission: clone(source.mission),
+    mission: null,
     healthRecords: clone(healthRecords),
     alerts: augmentedAlerts,
-    healthReadings: crew.flatMap((member) => metricDefinitions.map((metric) => {
-      const reading = member.readings[metric.id];
-      return {
+    healthReadings: source.healthData.records.flatMap((record) => {
+      const member = crew.find((entry) => entry.id === record.astronautId);
+      return record.measurements.map((measurement) => ({
         crewId: member.id,
         astronautName: member.name,
-        parameter: metric.parameter,
-        value: reading.value,
-        unit: reading.unit,
-        history: reading.history,
-        timestamp: reading.timestamp,
-        source: reading.source,
-        status: reading.status,
-        severity: reading.alert?.severity || reading.status,
-        message: reading.alert?.message || `${metric.parameter} demonstration snapshot.`,
-        recommendation: reading.alert?.recommendation || "Review this demonstration sample; no live sensor feed is connected.",
-        referenceRange: metric.range,
-      };
-    })),
+        parameter: measurement.parameter,
+        value: measurement.value,
+        unit: measurement.unit,
+        history: member.readings[measurement.parameter].history,
+        timestamp: record.timestamp,
+        source: record.source,
+        status: "Available",
+        severity: "Unassessed",
+        message: "No risk classification was supplied with this measurement.",
+        recommendation: null,
+        referenceRange: member.readings[measurement.parameter].referenceRange,
+      }));
+    }),
     riskOutlooks,
     trendInsights,
     persistentWarnings: warnings,
+    statistics: summarizeReadings(source.healthData.records.flatMap((record) => {
+      const member = source.crew.find((entry) => entry.id === record.astronautId);
+      return record.measurements.map((measurement) => ({
+        ...measurement,
+        crewId: record.astronautId,
+        astronautName: member.name,
+        timestamp: record.timestamp,
+      }));
+    })),
+    environmentBenchmarks: clone(source.environmentBenchmarks),
+    riskThresholds: clone(source.riskThresholds),
+    datasetStatus: clone(source.datasetStatus),
+    datasetErrors: clone(source.datasetErrors),
+    healthDataQuality: {
+      rows: source.healthData.records.length,
+      skippedRows: source.healthData.skippedRows,
+      invalidTimestamps: source.healthData.invalidTimestamps,
+    },
+    dataSource: "backend/data CSV files",
   };
 };
 
@@ -173,7 +396,7 @@ const getData = async () => {
 
 const updateAlertStatus = async (id, status) => {
   const source = await loadSourceData();
-  if (!alertRecords) alertRecords = clone(source.alerts);
+  if (!alertRecords) alertRecords = [];
   const alert = alertRecords.find((record) => record.id === id);
   if (!alert) {
     const generated = (await getData()).alerts.find((record) => record.id === id);
@@ -189,7 +412,7 @@ const updateAlertStatus = async (id, status) => {
 
 const createAlert = async (input) => {
   const source = await loadSourceData();
-  if (!alertRecords) alertRecords = clone(source.alerts);
+  if (!alertRecords) alertRecords = [];
   const member = source.crew.find((crewMember) => crewMember.id === input.astronautId);
   if (!member) return null;
   const alert = {
@@ -197,7 +420,7 @@ const createAlert = async (input) => {
     id: `ALT-${Date.now()}-${++createdAlertSequence}`,
     astronautName: member.name,
     status: "New",
-    source: input.source || "Simulated alert created by user",
+    source: input.source || "Crew health alert",
     timestamp: new Date().toISOString(),
   };
   alertRecords.unshift(alert);
@@ -206,7 +429,7 @@ const createAlert = async (input) => {
 
 const createHealthRecord = async (input) => {
   const source = await loadSourceData();
-  if (!alertRecords) alertRecords = clone(source.alerts);
+  if (!alertRecords) alertRecords = [];
   const member = source.crew.find((crewMember) => crewMember.id === input.astronautId);
   if (!member) return null;
 
@@ -269,14 +492,16 @@ const createHealthRecord = async (input) => {
 };
 
 const resetAlerts = async () => {
-  const source = await loadSourceData();
-  alertRecords = clone(source.alerts);
+  await loadSourceData();
+  alertRecords = [];
   generatedAlertStatuses.clear();
   return clone(alertRecords);
 };
 
 module.exports = {
   getData,
+  normalizeHealthReadings,
+  normalizeBenchmarks,
   updateAlertStatus,
   createAlert,
   createHealthRecord,

@@ -20,6 +20,7 @@ const riskLevels = [
   { id: "High", label: "High", className: "high", color: "#ff963d" },
   { id: "Medium", label: "Moderate", className: "moderate", color: "#f4c65e" },
   { id: "Low", label: "Low", className: "low", color: "#22c985" },
+  { id: "Unknown", label: "Not assessed", className: "unknown", color: "#71879a" },
 ];
 
 const comparisonOptions = [
@@ -52,63 +53,27 @@ const getSeverityClass = (severity) => String(severity || "unknown").toLowerCase
 
 function getMetricStatus(metric, reading) {
   if (!metric) return { label: "Reference unavailable", className: "unknown" };
-  const value = Number(reading?.value);
-  if (metric.id === "blood-pressure") {
-    const [systolic, diastolic] = String(reading?.value || "").split("/").map(Number);
-    if (!Number.isFinite(systolic) || !Number.isFinite(diastolic)) {
-      return { label: "No reading", className: "unknown" };
-    }
-    if (systolic >= 160 || diastolic >= 100) return { label: "Critical band", className: "critical" };
-    if (systolic >= 140 || diastolic >= 90) return { label: "Above demo band", className: "high" };
-    if (systolic >= 130 || diastolic >= 80 || systolic < 90) return { label: "Review band", className: "moderate" };
-    return { label: "Within demo band", className: "low" };
+  if (!reading || reading.value === null || reading.value === undefined || reading.value === "") {
+    return { label: "No reading", className: "unknown" };
   }
-  if (!Number.isFinite(value)) return { label: "No reading", className: "unknown" };
-
-  switch (metric.id) {
-    case "heart-rate":
-      if (value >= 120) return { label: "Critical band", className: "critical" };
-      if (value > 100) return { label: "Above demo band", className: "high" };
-      if (value < 60) return { label: "Review band", className: "moderate" };
-      break;
-    case "oxygen-saturation":
-      if (value < 90) return { label: "Critical band", className: "critical" };
-      if (value < 95) return { label: "Below demo band", className: "high" };
-      break;
-    case "body-temperature":
-      if (value >= 39) return { label: "Critical band", className: "critical" };
-      if (value > 37.5) return { label: "Above demo band", className: "high" };
-      if (value < 36.1) return { label: "Review band", className: "moderate" };
-      break;
-    case "respiratory-rate":
-      if (value > 24) return { label: "Critical band", className: "critical" };
-      if (value > 20 || value < 12) return { label: "Outside demo band", className: "high" };
-      break;
-    case "sleep-duration":
-      if (value < 5) return { label: "Below demo band", className: "high" };
-      if (value < 7 || value > 9) return { label: "Review band", className: "moderate" };
-      break;
-    case "stress-indicator":
-      if (value >= 85) return { label: "Critical band", className: "critical" };
-      if (value >= 75) return { label: "Above demo band", className: "high" };
-      if (value >= 60) return { label: "Review band", className: "moderate" };
-      break;
-    case "physical-activity":
-      if (value < 25) return { label: "Below demo target", className: "high" };
-      if (value < 40) return { label: "Review band", className: "moderate" };
-      break;
-    default:
-      break;
+  if (reading.status === "Available" || reading.status === "Unassessed") {
+    return { label: "Reading available · not assessed", className: "unknown" };
   }
-
-  return { label: "Within demo band", className: "low" };
+  if (reading.status === "Unavailable") return { label: "No reading", className: "unknown" };
+  const classes = { Critical: "critical", High: "high", Medium: "moderate", Low: "low" };
+  if (classes[reading.status]) {
+    const labels = { Critical: "Critical", High: "High", Medium: "Moderate", Low: "Low" };
+    return { label: labels[reading.status], className: classes[reading.status] };
+  }
+  return { label: "Assessment unavailable", className: "unknown" };
 }
 
 function getRiskLabel(risk) {
   if (risk === "Medium") return "Under observation";
   if (risk === "High") return "High risk";
   if (risk === "Critical") return "Critical";
-  return "Healthy";
+  if (risk === "Low") return "Low risk";
+  return "Not assessed";
 }
 
 function Icon({ name }) {
@@ -173,9 +138,9 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
           <div className="crew-dialog-identity">
             <CrewAvatar name={member.name} large />
             <div>
-              <span className="crew-section-kicker">DEMO CREW PROFILE · {member.id}</span>
+              <span className="crew-section-kicker">CREW PROFILE · {member.id}</span>
               <h2 id="crew-profile-title">{member.name}</h2>
-              <p>{member.role} · Age {member.age} <span>· simulated profile</span></p>
+              <p>{member.currentLocation || "Location not supplied"} · {member.missionTitle || "Mission not supplied"}</p>
             </div>
           </div>
           <button type="button" className="crew-icon-button" aria-label="Close crew profile" onClick={onClose}>×</button>
@@ -183,16 +148,16 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
 
         <div className="crew-dialog-content">
           <section className="crew-profile-overview">
-            <div><span>Current status</span><StatusPill status={risk.toLowerCase()} label={getRiskLabel(risk)} /></div>
-            <div><span>Demo health score</span><strong>{score}<small> / 100</small></strong></div>
-            <div><span>Last checkup · demo record</span><strong>{formatDate(member.lastCheckup)}</strong></div>
+            <div><span>Current risk status</span><StatusPill status={risk.toLowerCase()} label={getRiskLabel(risk)} /></div>
+            <div><span>Score</span><strong>{score ?? "—"}{score !== null && <small> / 100</small>}</strong></div>
+            <div><span>Last checkup</span><strong>{formatDate(member.lastCheckup)}</strong></div>
           </section>
 
           <div className="crew-profile-grid">
             <section className="crew-subpanel">
               <div className="crew-subpanel-heading">
                 <div><span className="crew-section-kicker">CURRENT SNAPSHOT</span><h3>Health metrics</h3></div>
-                <span className="crew-demo-label">DEMO / SIMULATED</span>
+                <span className="crew-demo-label">CSV SOURCE</span>
               </div>
               <div className="crew-profile-metrics">
                 {metricDefinitions.map((metric) => {
@@ -201,13 +166,13 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
                   return (
                     <div className="crew-profile-metric" key={metric.id}>
                       <span>{metric.label}</span>
-                      <strong>{reading.value} <small>{reading.unit}</small></strong>
+                      <strong>{reading.value ?? "—"} <small>{reading.unit}</small></strong>
                       <StatusPill status={status.className} label={status.label} />
                     </div>
                   );
                 })}
               </div>
-              <p className="crew-data-note">Values may be simulated or supplied with demonstration alert records. Reference bands are illustrative and are not medical guidance.</p>
+              <p className="crew-data-note">Readings and location reference ranges come from the supplied CSV datasets; a reference range alone is not a risk assessment.</p>
             </section>
 
             <section className="crew-subpanel">
@@ -229,9 +194,9 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
                 </>
               ) : <p className="crew-empty-message">No historical samples are available for this crew member.</p>}
               <div className="crew-exercise-summary">
-                <div><span>Sleep sample</span><strong>{readings["sleep-duration"].value} h</strong></div>
-                <div><span>Activity sample</span><strong>{readings["physical-activity"].value}%</strong></div>
-                <small>Exercise and recovery history is limited to the available demo samples.</small>
+                <div><span>Sleep sample</span><strong>{readings["sleep-duration"].value ?? "—"} h</strong></div>
+                <div><span>Activity sample</span><strong>{readings["physical-activity"].value ?? "—"}%</strong></div>
+                <small>Exercise and recovery data is limited to the supplied health readings.</small>
               </div>
             </section>
 
@@ -250,7 +215,7 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
                   ))}
                 </div>
               ) : <p className="crew-empty-message">No alert records are available.</p>}
-              <p className="crew-data-note">A complete personal medical history was not supplied in the demonstration data.</p>
+              <p className="crew-data-note">A complete personal medical history was not supplied in the CSV datasets.</p>
             </section>
 
             <section className="crew-subpanel crew-assessment-panel">
@@ -260,7 +225,7 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
               </div>
               <StatusPill status={riskOutlook.className} label={`${riskOutlook.label} · score ${riskOutlook.score}/100`} />
               <p className="crew-assessment-copy">
-                A rule-based trend projection from supplied/simulated history and unresolved demo alerts. The score is not a probability, diagnosis, or clinical score.
+                A rule-based trend projection from available history and unresolved alerts. It is not a probability, diagnosis, or clinical score.
               </p>
               {riskOutlook.explanation.length > 0 && (
                 <ul className="crew-action-list crew-explanation-list">
@@ -272,7 +237,18 @@ function CrewProfileDialog({ member, memberAlerts, readings, risk, score, riskOu
                   {riskOutlook.actions.map((action) => <li key={action}>{action}</li>)}
                 </ul>
               ) : null}
-              <p className="crew-data-note">{riskOutlook.sampleCount} historical demo samples considered. Recommendations are general reminders to verify readings and follow established mission protocols.</p>
+              <p className="crew-data-note">{riskOutlook.sampleCount} historical samples considered. Recommendations are general reminders to verify readings and follow established mission protocols.</p>
+              {member.riskThresholds && (
+                <div className="crew-threshold-source">
+                  <strong>Supplied per-astronaut threshold values</strong>
+                  <ul>
+                    {Object.entries(member.riskThresholds)
+                      .filter(([key]) => !["Astronaut id", "Example"].includes(key))
+                      .map(([key, value]) => <li key={key}>{key}: {value}</li>)}
+                  </ul>
+                  <small>The CSV does not specify how these values relate to measurements; they are displayed as supplied and are not treated as cutoffs.</small>
+                </div>
+              )}
             </section>
           </div>
         </div>
@@ -295,7 +271,7 @@ function ProfileTrendChart({ metric, reading }) {
 
   return (
     <div className="crew-profile-chart">
-      <svg viewBox="0 0 400 150" role="img" aria-label={`${metric.label} demonstration sample sequence`}>
+      <svg viewBox="0 0 400 150" role="img" aria-label={`${metric.label} sample sequence`}>
         {[34, 75, 116].map((y) => <line key={y} x1="24" x2="378" y1={y} y2={y} className="crew-chart-grid" />)}
         <polyline points={points} className="crew-profile-line" />
         {values.map((value, index) => {
@@ -317,6 +293,7 @@ function ComparisonChart({ metric, crew, readingsByCrew }) {
   const values = crew.map((member) => {
     if (metric.id === "health-score") return member.score;
     const reading = readingsByCrew[member.id][metric.metric];
+    if (reading.value === null || reading.value === undefined || reading.value === "") return NaN;
     return metric.metric === "Blood Pressure"
       ? Number(String(reading.value).split("/")[0])
       : Number(reading.value);
@@ -324,7 +301,7 @@ function ComparisonChart({ metric, crew, readingsByCrew }) {
 
   return (
     <div className="crew-comparison-chart">
-      <svg viewBox="0 0 520 225" role="img" aria-label={`${metric.label} comparison across demo crew members`}>
+      <svg viewBox="0 0 520 225" role="img" aria-label={`${metric.label} comparison across crew members`}>
         {[0, 0.33, 0.66, 1].map((fraction) => {
           const y = baseline - fraction * plotHeight;
           return (
@@ -361,7 +338,7 @@ function ComparisonChart({ metric, crew, readingsByCrew }) {
         })}
       </svg>
       <div className="crew-chart-legend">
-        <span><i className="crew-legend-dot crew-status-low" />Within demo band</span>
+        <span><i className="crew-legend-dot crew-status-low" />Low risk</span>
         <span><i className="crew-legend-dot crew-status-moderate" />Review</span>
         <span><i className="crew-legend-dot crew-status-high" />Outside band</span>
       </div>
@@ -451,13 +428,15 @@ export default function CrewOverview() {
   const selectedComparison = comparisonOptions.find((option) => option.id === comparisonId) || comparisonOptions[0];
   const selectedMember = crew.find((member) => member.id === selectedMemberId);
   const totalAlerts = crewAlerts.filter((alert) => alert.status !== "Resolved");
-  const averageScore = crew.length
-    ? Math.round(crew.reduce((total, member) => total + member.score, 0) / crew.length)
-    : 0;
+  const scoredCrew = crew.filter((member) => member.score !== null && Number.isFinite(member.score));
+  const averageScore = scoredCrew.length
+    ? Math.round(scoredCrew.reduce((total, member) => total + member.score, 0) / scoredCrew.length)
+    : null;
   const criticalAlerts = totalAlerts.filter((alert) => alert.severity === "Critical").length;
   const highRiskMembers = riskOutlooks.filter((outlook) => outlook.id === "High" || outlook.id === "Critical").length;
   const observationMembers = riskOutlooks.filter((outlook) => outlook.id === "Medium").length;
   const healthyMembers = riskOutlooks.filter((outlook) => outlook.id === "Low").length;
+  const unassessedMembers = riskOutlooks.filter((outlook) => outlook.id === "Unknown").length;
   const selectedCrew = crew.filter((member) => {
     const search = crewSearch.trim().toLowerCase();
     return !search || `${member.name} ${member.id} ${member.role}`.toLowerCase().includes(search);
@@ -468,6 +447,9 @@ export default function CrewOverview() {
     .sort((first, second) => (Date.parse(second.timestamp) || 0) - (Date.parse(first.timestamp) || 0));
   const abnormalCount = crew.filter(
     (member) => !["low", "unknown"].includes(getMetricStatus(selectedMetric, member.readings[selectedMetric.parameter || selectedMetric.label]).className)
+  ).length;
+  const unassessedMetricCount = crew.filter(
+    (member) => getMetricStatus(selectedMetric, member.readings[selectedMetric.parameter || selectedMetric.label]).className === "unknown"
   ).length;
 
   const openProfile = (memberId) => setSelectedMemberId(memberId);
@@ -480,9 +462,9 @@ export default function CrewOverview() {
           <div className="crew-command-title">
             <span className="app-eyebrow">ASTRA · MISSION HEALTH OPERATIONS</span>
             <h1>Crew Health Command Center</h1>
-            <p>Astronaut health &amp; mission monitoring · simulated demonstration data</p>
+            <p>Astronaut profiles and health records loaded from the backend CSV datasets</p>
           </div>
-          <span className="crew-demo-label">DEMONSTRATION ENVIRONMENT</span>
+          <span className="crew-demo-label">CSV DATA</span>
         </header>
         <section className="app-panel" role={error ? "alert" : "status"}>
           {loading && <p>Loading crew and health data from the backend…</p>}
@@ -504,11 +486,14 @@ export default function CrewOverview() {
         <div className="crew-command-title">
           <span className="app-eyebrow">ASTRA · MISSION HEALTH OPERATIONS</span>
           <h1>Crew Health Command Center</h1>
-          <p>Astronaut health &amp; mission monitoring · simulated demonstration data</p>
+          <p>Astronaut profiles and health records loaded from the backend CSV datasets</p>
         </div>
         <div className="crew-header-status">
-          <span className="crew-demo-label">DEMONSTRATION ENVIRONMENT</span>
-          <StatusPill status={highRiskMembers > 0 ? "high" : "low"} label={highRiskMembers > 0 ? "Crew attention required" : "Crew within demo bands"} />
+          <span className="crew-demo-label">CSV DATA</span>
+          <StatusPill
+            status={unassessedMembers === crew.length ? "unknown" : highRiskMembers > 0 ? "high" : "low"}
+            label={unassessedMembers === crew.length ? "Health risk not assessed" : highRiskMembers > 0 ? "Crew attention required" : "Risk engine summary"}
+          />
           <span className="crew-sync-label">Backend sync · {lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       </header>
@@ -516,21 +501,21 @@ export default function CrewOverview() {
       <section className="crew-mission-strip" aria-label="Mission status">
         <div className="crew-mission-name">
           <span className="crew-mission-mark" aria-hidden="true">A</span>
-          <div><span className="crew-section-kicker">CURRENT MISSION · SIMULATED</span><strong>{mission.name}</strong></div>
+          <div><span className="crew-section-kicker">MISSION</span><strong>{mission?.name || "Mission details not included in the CSV datasets"}</strong></div>
         </div>
-        <div className="crew-mission-stat"><span>MISSION DAY</span><strong>{mission.day}<small> / {mission.durationDays}</small></strong></div>
-        <div className="crew-mission-stat"><span>MISSION PHASE</span><strong>{mission.phase}</strong></div>
-        <div className="crew-mission-stat"><span>STATUS</span><StatusPill status="low" label={mission.status} /></div>
-        <div className="crew-mission-stat"><span>DAYS REMAINING</span><strong>{Math.max(0, mission.durationDays - mission.day)}</strong></div>
+        <div className="crew-mission-stat"><span>MISSION DAY</span><strong>{mission ? `${mission.day} / ${mission.durationDays}` : "Unavailable"}</strong></div>
+        <div className="crew-mission-stat"><span>MISSION PHASE</span><strong>{mission?.phase || "Unavailable"}</strong></div>
+        <div className="crew-mission-stat"><span>STATUS</span><strong>{mission?.status || "Unavailable"}</strong></div>
+        <div className="crew-mission-stat"><span>DAYS REMAINING</span><strong>{mission ? Math.max(0, mission.durationDays - mission.day) : "Unavailable"}</strong></div>
       </section>
 
       <section className="crew-summary-grid" aria-label="Crew health summary">
-        <SummaryCard label="Total crew members" value={crew.length} description="Demo roster members" icon="crew" tone="neutral" />
-        <SummaryCard label="Healthy" value={healthyMembers} description="Low open-alert burden" icon="healthy" tone="low" />
+        <SummaryCard label="Total crew members" value={crew.length} description="CSV roster records" icon="crew" tone="neutral" />
+        <SummaryCard label="Low risk" value={healthyMembers} description="Low risk-engine result" icon="healthy" tone="low" />
         <SummaryCard label="Under observation" value={observationMembers} description="Unresolved moderate alerts" icon="observe" tone="moderate" />
-        <SummaryCard label="High risk" value={highRiskMembers} description="High or critical demo alerts" icon="risk" tone="high" />
+        <SummaryCard label="High risk" value={highRiskMembers} description="High or critical risk-engine result" icon="risk" tone="high" />
         <SummaryCard label="Critical alerts" value={criticalAlerts} description="Unresolved critical records" icon="critical" tone="critical" />
-        <SummaryCard label="Average crew health score" value={`${averageScore}`} description="Illustrative rule summary · /100" icon="score" tone="neutral" />
+        <SummaryCard label="Average crew score" value={averageScore ?? "—"} description={averageScore === null ? "No score data available" : "Based on available alerts"} icon="score" tone="neutral" />
       </section>
 
       <section className="crew-command-section">
@@ -551,26 +536,26 @@ export default function CrewOverview() {
                   <CrewAvatar name={member.name} />
                   <div className="crew-member-identity">
                     <h3>{member.name}</h3>
-                    <span>{member.id} · {member.role}</span>
+                    <span>{member.id} · {member.currentLocation || "Location unavailable"}</span>
                   </div>
                   <StatusPill status={member.risk.toLowerCase()} label={getRiskLabel(member.risk)} />
                 </div>
                 <div className="crew-member-score">
-                  <div><span>Demo health score</span><strong>{member.score}<small> / 100</small></strong></div>
+                  <div><span>Crew score</span><strong>{member.score ?? "—"}{member.score !== null && <small> / 100</small>}</strong></div>
                   <div className="crew-score-track" role="img" aria-label={`Illustrative health score ${member.score} out of 100`}>
-                    <span style={{ width: `${member.score}%` }} />
+                    <span style={{ width: `${member.score ?? 0}%` }} />
                   </div>
                 </div>
                 <div className="crew-member-facts">
-                  <span><small>AGE · DEMO</small>{member.age}</span>
-                  <span><small>LAST CHECKUP · DEMO</small>{formatDate(member.lastCheckup)}</span>
+                  <span><small>YEAR OF BIRTH</small>{member.yearOfBirth || "Not supplied"}</span>
+                  <span><small>MISSION</small>{member.missionTitle || "Not supplied"}</span>
                 </div>
                 <div className="crew-mini-metrics">
                   {quickMetrics.map((metricName) => {
                     const metric = metricDefinitions.find((item) => item.parameter === metricName);
                     const reading = member.readings[metricName];
                     const status = getMetricStatus(metric, reading);
-                    return <span key={metricName} title={`${metricName}: ${status.label}`}><i className={`crew-mini-dot crew-status-${status.className}`} />{metricName === "Oxygen Saturation" ? "SpO₂" : metricName === "Sleep Duration" ? "Sleep" : "HR"} <strong>{reading.value}</strong></span>;
+                    return <span key={metricName} title={`${metricName}: ${status.label}`}><i className={`crew-mini-dot crew-status-${status.className}`} />{metricName === "Oxygen Saturation" ? "SpO₂" : metricName === "Sleep Duration" ? "Sleep" : "HR"} <strong>{reading.value ?? "—"}</strong></span>;
                   })}
                 </div>
                 <div className="crew-member-footer">
@@ -586,41 +571,58 @@ export default function CrewOverview() {
 
       <section className="crew-command-section">
         <div className="crew-section-heading">
-          <div><span className="crew-section-kicker">CREW VITALS</span><h2>Health monitoring</h2><p>Select an indicator to review each crew member against the illustrative demo reference band.</p></div>
-          <span className="crew-demo-label">SIMULATED SNAPSHOT + SUPPLIED DEMO ALERTS</span>
+          <div><span className="crew-section-kicker">CREW VITALS</span><h2>Health monitoring</h2><p>Review source measurements and the risk assessments supplied by the backend.</p></div>
+          <span className="crew-demo-label">CSV MEASUREMENTS + RISK ENGINE</span>
         </div>
         <div className="crew-metric-selector" role="group" aria-label="Choose a health indicator">
           {metricDefinitions.map((metric) => {
             const readings = crew.map((member) => member.readings[metric.parameter || metric.label]);
-            const abnormal = readings.filter((reading) => !["low", "unknown"].includes(getMetricStatus(metric, reading).className)).length;
+            const assessedReadings = readings.filter((reading) =>
+              ["critical", "high", "moderate", "low"].includes(getMetricStatus(metric, reading).className)
+            );
+            const abnormal = assessedReadings.filter((reading) =>
+              !["low"].includes(getMetricStatus(metric, reading).className)
+            ).length;
+            const values = readings.filter((reading) =>
+              reading.value !== null && reading.value !== undefined && reading.value !== ""
+            );
             let summary;
             if (metric.id === "blood-pressure") {
-              const averageSystolic = readings.reduce(
+              const averageSystolic = values.reduce(
                 (total, reading) => total + Number(String(reading.value).split("/")[0]),
                 0
-              ) / (readings.length || 1);
-              const averageDiastolic = readings.reduce(
+              ) / (values.length || 1);
+              const averageDiastolic = values.reduce(
                 (total, reading) => total + Number(String(reading.value).split("/")[1]),
                 0
-              ) / (readings.length || 1);
-              summary = `${Math.round(averageSystolic)}/${Math.round(averageDiastolic)} ${metric.unit} avg`;
+              ) / (values.length || 1);
+              summary = values.length
+                ? `${Math.round(averageSystolic)}/${Math.round(averageDiastolic)} ${metric.unit} avg`
+                : "No data";
             } else {
-              const average = readings.reduce((total, reading) => total + Number(reading.value), 0) / (readings.length || 1);
-              summary = `${formatNumber(average)} ${metric.unit} avg`;
+              const numericReadings = values.filter((reading) => Number.isFinite(Number(reading.value)));
+              const average = numericReadings.length
+                ? numericReadings.reduce((total, reading) => total + Number(reading.value), 0) / numericReadings.length
+                : null;
+              summary = average === null ? "No data" : `${formatNumber(average)} ${metric.unit} avg`;
             }
             return (
               <button type="button" key={metric.id} className={`crew-metric-tile${selectedMetricId === metric.id ? " is-selected" : ""}`} aria-pressed={selectedMetricId === metric.id} onClick={() => setSelectedMetricId(metric.id)}>
                 <span>{metric.label}</span>
                 <strong>{summary}</strong>
-                <small>{abnormal} outside demo band</small>
+                <small>{assessedReadings.length ? `${abnormal} outside configured band` : "Risk not assessed"}</small>
               </button>
             );
           })}
         </div>
         <section className="crew-subpanel crew-monitor-panel" aria-live="polite">
           <div className="crew-subpanel-heading">
-            <div><span className="crew-section-kicker">SELECTED INDICATOR</span><h3>{selectedMetric.label} · {selectedMetric.range}</h3></div>
-            <span className="crew-monitor-count">{abnormalCount} of {crew.length} outside illustrative band</span>
+            <div><span className="crew-section-kicker">SELECTED INDICATOR</span><h3>{selectedMetric.label}</h3></div>
+            <span className="crew-monitor-count">
+              {unassessedMetricCount === crew.length
+                ? "No risk assessments available"
+                : `${abnormalCount} flagged · ${unassessedMetricCount} not assessed`}
+            </span>
           </div>
           <div className="crew-monitor-list">
             {crew.map((member) => {
@@ -629,22 +631,22 @@ export default function CrewOverview() {
               return (
                 <article className="crew-monitor-row" key={member.id}>
                   <div className="crew-monitor-person"><CrewAvatar name={member.name} /><span><strong>{member.name}</strong><small>{member.id}</small></span></div>
-                  <strong className={`crew-monitor-value crew-text-${status.className}`}>{reading.value} <small>{reading.unit}</small></strong>
-                  <span className="crew-monitor-range">Demo reference <strong>{selectedMetric.range}</strong></span>
+                  <strong className={`crew-monitor-value crew-text-${status.className}`}>{reading.value ?? "—"} <small>{reading.unit}</small></strong>
+                  <span className="crew-monitor-range">Location reference <strong>{reading.referenceRange || "Not supplied"}</strong></span>
                   <StatusPill status={status.className} label={status.label} />
                   <span className="crew-reading-source">{reading.source}</span>
                 </article>
               );
             })}
           </div>
-          <p className="crew-data-note">Reference bands are illustrative display thresholds, not clinical advice. This page has no connected live sensor feed.</p>
+          <p className="crew-data-note">Location reference ranges come from the NASA CSV datasets. A reading without an available assessment rule remains unassessed. No live sensors are connected.</p>
         </section>
       </section>
 
       <div className="crew-dashboard-grid">
         <section className="crew-subpanel crew-comparison-panel">
           <div className="crew-subpanel-heading">
-            <div><span className="crew-section-kicker">SIDE-BY-SIDE SNAPSHOT</span><h2>Crew health comparison</h2><p>Sample values across the demonstration roster.</p></div>
+            <div><span className="crew-section-kicker">SIDE-BY-SIDE SNAPSHOT</span><h2>Crew health comparison</h2><p>Available measured values across the CSV crew roster.</p></div>
           </div>
           <div className="crew-chart-tabs" role="tablist" aria-label="Select comparison metric">
             {comparisonOptions.map((option) => (
@@ -656,10 +658,10 @@ export default function CrewOverview() {
 
         <section className="crew-subpanel crew-risk-panel">
           <div className="crew-subpanel-heading">
-            <div><span className="crew-section-kicker">OPEN ALERT SEVERITY</span><h2>Crew risk distribution</h2><p>Highest unresolved supplied alert per demo crew member.</p></div>
+            <div><span className="crew-section-kicker">RISK ENGINE SUMMARY</span><h2>Crew risk distribution</h2><p>Risk levels from available history and unresolved alerts.</p></div>
           </div>
           <RiskDistribution crew={crew} />
-          <p className="crew-data-note">Categories summarize supplied alert labels only; they are not clinical risk predictions.</p>
+          <p className="crew-data-note">Risk categories are rule-based indicators, not diagnoses or clinical predictions. Missing measurements remain unassessed.</p>
         </section>
       </div>
 
@@ -668,7 +670,7 @@ export default function CrewOverview() {
           <div>
             <span className="crew-section-kicker">HISTORICAL TREND REVIEW</span>
             <h2>Crew risk outlook</h2>
-            <p>Heuristic attention scores from available sample trends and unresolved demo alert labels.</p>
+            <p>Heuristic attention scores from available CSV history and unresolved alerts.</p>
           </div>
           <span className="crew-demo-label">RULE-BASED · NOT TRAINED AI</span>
         </div>
@@ -685,11 +687,11 @@ export default function CrewOverview() {
                   <StatusPill status={outlook.className} label={outlook.label} />
                 </div>
                 <div className="crew-prediction-score">
-                  <span>Trend attention score · not probability</span>
-                  <strong>{outlook.score}<small> / 100</small></strong>
+                  <span>{outlook.score === null ? "Trend score" : "Trend attention score · not probability"}</span>
+                  <strong>{outlook.score ?? "—"}{outlook.score !== null && <small> / 100</small>}</strong>
                 </div>
-                <div className="crew-prediction-track" role="img" aria-label={`Rule-based trend attention score ${outlook.score} out of 100`}>
-                  <span style={{ width: `${outlook.score}%` }} />
+                <div className="crew-prediction-track" role="img" aria-label={outlook.score === null ? "Risk not assessed because health data is unavailable" : `Rule-based trend attention score ${outlook.score} out of 100`}>
+                  <span style={{ width: `${outlook.score ?? 0}%` }} />
                 </div>
                 <div className="crew-prediction-explanation">
                   <strong>Why this outlook</strong>
@@ -705,7 +707,7 @@ export default function CrewOverview() {
           })}
         </div>
         <p className="crew-data-note">
-          Heuristic score combines directional changes in historical demo/simulated samples with unresolved alert severity. Thresholds are illustrative; the score is not a probability, trained AI output, diagnosis, or clinical risk assessment. Sample timestamps are unavailable.
+          The existing rule-based engine uses available historical changes and unresolved alerts. Scores are not probabilities, trained AI output, diagnoses, or clinical risk assessments; no score is shown when source data is insufficient.
         </p>
       </section>
 
@@ -741,9 +743,9 @@ export default function CrewOverview() {
         <section className="crew-subpanel crew-early-warning-panel">
           <div className="crew-subpanel-heading">
             <div>
-              <span className="crew-section-kicker">EARLY WARNING · DEMO HISTORY</span>
+              <span className="crew-section-kicker">EARLY WARNING · AVAILABLE HISTORY</span>
               <h2>Persistent out-of-band samples</h2>
-              <p>Latest two consecutive samples outside an illustrative band.</p>
+              <p>Latest consecutive samples flagged by the existing risk engine.</p>
             </div>
             <span className="crew-alert-total">{persistentWarnings.length} warnings</span>
           </div>
@@ -756,7 +758,7 @@ export default function CrewOverview() {
                     <div className="crew-warning-title"><strong>{warning.name}</strong><RiskBadge severity={warning.severity} /></div>
                     <p>{warning.metric} · {warning.value} {warning.unit}</p>
                     <span>{warning.timestamp ? `Source alert · ${formatTimestamp(warning.timestamp)}` : "Timestamp unavailable in source data"}</span>
-                    <small>{warning.sampleCount} consecutive demo samples · {warning.source}</small>
+                    <small>{warning.sampleCount} consecutive samples · {warning.source}</small>
                     <p className="crew-warning-action"><strong>Suggested action:</strong> {warning.action}</p>
                   </div>
                   <button type="button" className="crew-text-button" onClick={() => openProfile(warning.memberId)}>Profile <span aria-hidden="true">→</span></button>
@@ -764,9 +766,9 @@ export default function CrewOverview() {
               ))}
             </div>
           ) : (
-            <p className="crew-empty-message">No parameters are outside their illustrative band for two consecutive available samples.</p>
+            <p className="crew-empty-message">No persistent warnings can be calculated from the available health history.</p>
           )}
-          <p className="crew-data-note">Warnings are derived from static demo history, are not continuous sensor monitoring, and are deduplicated against matching unresolved alert records.</p>
+          <p className="crew-data-note">Warnings use available history, are not continuous sensor monitoring, and are deduplicated against matching unresolved alert records.</p>
         </section>
       </div>
 
@@ -815,21 +817,21 @@ export default function CrewOverview() {
               <div><span className="crew-section-kicker">MISSION CONTEXT</span><h2>Mission information</h2></div>
             </div>
             <dl className="crew-mission-details">
-              <div><dt>Mission</dt><dd>{mission.name}</dd></div>
-              <div><dt>Duration</dt><dd>{mission.durationDays} days</dd></div>
-              <div><dt>Current day</dt><dd>Day {mission.day}</dd></div>
-              <div><dt>Days remaining</dt><dd>{Math.max(0, mission.durationDays - mission.day)}</dd></div>
-              <div><dt>Crew size</dt><dd>{crew.length} demo members</dd></div>
-              <div><dt>Mission phase</dt><dd>{mission.phase}</dd></div>
-              <div><dt>Status</dt><dd><StatusPill status="low" label={mission.status} /></dd></div>
+              <div><dt>Mission</dt><dd>{mission?.name || "Not supplied"}</dd></div>
+              <div><dt>Duration</dt><dd>{mission ? `${mission.durationDays} days` : "Not supplied"}</dd></div>
+              <div><dt>Current day</dt><dd>{mission ? `Day ${mission.day}` : "Not supplied"}</dd></div>
+              <div><dt>Days remaining</dt><dd>{mission ? Math.max(0, mission.durationDays - mission.day) : "Not supplied"}</dd></div>
+              <div><dt>Crew size</dt><dd>{crew.length}</dd></div>
+              <div><dt>Mission phase</dt><dd>{mission?.phase || "Not supplied"}</dd></div>
+              <div><dt>Status</dt><dd>{mission?.status || "Not supplied"}</dd></div>
             </dl>
-            <p className="crew-data-note">Mission values are fictional demonstration data and do not describe an actual NASA mission.</p>
+            <p className="crew-data-note">Current mission details are not present in the supplied crew roster CSV.</p>
           </section>
         </div>
       </div>
 
       <p className="crew-global-disclaimer">
-        Demonstration records are not live telemetry. Supplemental metrics, mission details, roster demographics, risk outlooks, and warnings are simulated or illustrative. Risk summaries are rule-based, not trained AI; consult verified medical protocols for decisions.
+        No live telemetry is connected. Mission details and measurements are unavailable when absent from source records. Risk summaries are rule-based, not diagnoses; follow verified mission medical protocols for decisions.
       </p>
 
       {selectedMember && (

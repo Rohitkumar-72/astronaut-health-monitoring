@@ -91,6 +91,9 @@ export const getRisks = (options) => request("/risks", options);
 export const getCrewRisk = (crewId, options) => request(`/risks/${encodeURIComponent(crewId)}`, options);
 export const getMission = (options) => request("/mission", options);
 export const getMissionStatus = (options) => request("/mission/status", options);
+export const getCsvDataset = (datasetName, options) =>
+  request(`/data/csv/${encodeURIComponent(datasetName)}`, options);
+export const getCsvDatasetStatus = (options) => request("/data/csv/status", options);
 export const sendAssistantMessage = (messages, options = {}) => request("/assistant/chat", {
   ...options,
   method: "POST",

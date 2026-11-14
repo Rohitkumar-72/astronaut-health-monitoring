@@ -1,11 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
 import RiskBadge from "../components/RiskBadge";
-import { getHealthHistory, getHealthRecords } from "../services/api";
+import { getHealthHistory, getHealthReadings, getHealthRecords } from "../services/api";
 import useApiResource from "../hooks/useApiResource";
 
 export default function HealthHistory() {
-  const loadHistory = useCallback(({ signal }) => getHealthHistory({ signal }), []);
-  const { data: records, error, loading, reload } = useApiResource(loadHistory);
+  const loadHistory = useCallback(async ({ signal }) => {
+    const [alerts, readings] = await Promise.all([
+      getHealthHistory({ signal }),
+      getHealthReadings({}, { signal }),
+    ]);
+    return { alerts, readings };
+  }, []);
+  const { data: historyData, error, loading, reload } = useApiResource(loadHistory);
   const loadConfirmedRecords = useCallback(({ signal }) => getHealthRecords({ signal }), []);
   const {
     data: confirmedRecords,
@@ -18,6 +24,16 @@ export default function HealthHistory() {
   const [crewFilter, setCrewFilter] = useState("All");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const records = useMemo(() => [
+    ...(historyData?.alerts || []),
+    ...(historyData?.readings || []).map((reading, index) => ({
+      ...reading,
+      id: `csv-${reading.crewId}-${reading.parameter}-${reading.timestamp || index}`,
+      astronautId: reading.crewId,
+      status: reading.status || "Available",
+      message: reading.message || reading.source || "CSV health reading",
+    })),
+  ], [historyData]);
   const history = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return [...(records || [])]
@@ -45,9 +61,9 @@ export default function HealthHistory() {
         <div>
           <span className="app-eyebrow">RECORDED EVENTS</span>
           <h1 id="health-history-title">Health History</h1>
-          <p>Review health records returned by the backend demonstration dataset.</p>
+          <p>Review measurements and alerts supplied by the backend CSV data and confirmed reports.</p>
         </div>
-        <span className="app-demo-tag">SIMULATED / HISTORICAL DATA</span>
+        <span className="app-demo-tag">CSV / HISTORICAL DATA</span>
       </header>
       {loading || error ? (
         <section className="app-panel" role={error ? "alert" : "status"}>
@@ -63,7 +79,7 @@ export default function HealthHistory() {
       ) : (
       <section className="app-panel">
         <div className="app-section-heading app-history-heading">
-          <div><h2>Recorded sample events</h2><p>{history.length} of {records.length} records</p></div>
+          <div><h2>Recorded health events</h2><p>{history.length} of {records.length} records</p></div>
           <label className="app-search-label">
             Search history
             <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Astronaut, metric, status..." />

@@ -7,13 +7,13 @@ const router = express.Router();
 router.get("/csv/status", (req, res) => {
   const files = csvService.checkCSVFiles();
 
-  const allAvailable = files.every((file) => file.exists);
+  const allAvailable = files.every((file) => file.exists && file.readable);
 
   res.status(allAvailable ? 200 : 503).json({
     success: allAvailable,
     message: allAvailable
-      ? "All CSV files are connected successfully."
-      : "Some CSV files are missing.",
+      ? "All declared CSV files are available."
+      : "One or more declared CSV files are missing.",
     data: files,
   });
 });
@@ -21,12 +21,13 @@ router.get("/csv/status", (req, res) => {
 // Get all CSV datasets
 router.get("/csv", (req, res, next) => {
   try {
-    const data = csvService.getAllCSVData();
+    const { data, errors } = csvService.getAllCSVData();
 
-    res.json({
-      success: true,
+    res.status(errors.length ? 206 : 200).json({
+      success: errors.length === 0,
       source: "backend/data CSV files",
       data,
+      errors,
     });
   } catch (error) {
     next(error);
@@ -47,8 +48,12 @@ router.get("/csv/:datasetName", (req, res, next) => {
   } catch (error) {
     if (error.message.startsWith("Unknown CSV dataset")) {
       return res.status(404).json({
-        success: false,
-        message: error.message,
+        error: { code: "UNKNOWN_CSV_DATASET", message: error.message },
+      });
+    }
+    if (error.code === "CSV_FILE_NOT_FOUND") {
+      return res.status(503).json({
+        error: { code: error.code, message: error.message },
       });
     }
 
