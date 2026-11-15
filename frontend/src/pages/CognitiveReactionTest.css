@@ -1,0 +1,201 @@
+.cognitive-test-panel {
+  display: grid;
+  gap: 28px;
+  padding: clamp(20px, 4vw, 36px);
+}
+
+.cognitive-test-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  gap: 28px;
+}
+
+.cognitive-test-intro h2,
+.cognitive-test-results h2 {
+  margin: 8px 0 16px;
+  color: var(--app-text);
+  font-size: clamp(1.3rem, 3vw, 1.8rem);
+}
+
+.cognitive-test-intro ol {
+  display: grid;
+  gap: 10px;
+  padding-left: 22px;
+  color: var(--app-muted);
+  line-height: 1.6;
+}
+
+.cognitive-test-intro li::marker {
+  color: var(--app-accent-secondary);
+  font-weight: 700;
+}
+
+.cognitive-test-disclaimer {
+  align-self: start;
+  margin: 0;
+  padding: 18px;
+  color: #d6e5f1;
+  background: rgb(54 213 242 / 7%);
+  border: 1px solid rgb(54 213 242 / 18%);
+  border-radius: 14px;
+  line-height: 1.6;
+}
+
+.cognitive-test-start {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 20px;
+  border-top: 1px solid var(--app-border);
+}
+
+.cognitive-test-start p {
+  margin: 0;
+  color: var(--app-muted);
+}
+
+.cognitive-test-round,
+.cognitive-test-results {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  padding: clamp(18px, 4vw, 32px);
+  background: rgb(6 17 34 / 72%);
+  border: 1px solid rgb(106 183 220 / 20%);
+  border-radius: 18px;
+  text-align: center;
+}
+
+.cognitive-test-round-heading {
+  display: grid;
+  gap: 7px;
+  color: var(--app-muted);
+  letter-spacing: 0.06em;
+}
+
+.cognitive-test-round-heading strong {
+  color: var(--app-text);
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.cognitive-test-stimulus {
+  display: grid;
+  place-items: center;
+  width: min(52vw, 180px);
+  aspect-ratio: 1;
+  color: #d9faff;
+  background: radial-gradient(circle at 35% 28%, rgb(78 226 237 / 36%), rgb(16 74 105 / 92%) 68%);
+  border: 1px solid rgb(119 232 245 / 50%);
+  border-radius: 50%;
+  box-shadow: 0 0 32px rgb(54 213 242 / 16%), inset 0 0 24px rgb(54 213 242 / 14%);
+  font-size: clamp(3rem, 12vw, 5rem);
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.cognitive-test-stimulus:hover {
+  border-color: rgb(145 239 247 / 85%);
+  transform: translateY(-2px);
+}
+
+.cognitive-test-stimulus:focus-visible {
+  outline: 3px solid #91eff7;
+  outline-offset: 4px;
+}
+
+.cognitive-test-round-stimulus .cognitive-test-stimulus {
+  color: #081522;
+  background: radial-gradient(circle at 35% 28%, #d7fcff, #54d9ed 72%);
+  box-shadow: 0 0 42px rgb(54 213 242 / 42%);
+}
+
+.cognitive-test-feedback {
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--app-muted);
+}
+
+.cognitive-test-results {
+  justify-items: stretch;
+  text-align: left;
+}
+
+.cognitive-test-results > .dashboard-section-kicker,
+.cognitive-test-results h2,
+.cognitive-test-result-summary,
+.cognitive-test-results > button {
+  justify-self: center;
+  text-align: center;
+}
+
+.cognitive-test-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.cognitive-test-result-grid article {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+}
+
+.cognitive-test-result-grid span {
+  color: var(--app-muted);
+  font-size: 0.86rem;
+}
+
+.cognitive-test-result-grid strong {
+  color: var(--app-text);
+  font-size: 1.15rem;
+}
+
+.cognitive-test-result-summary,
+.cognitive-test-save-error {
+  margin: 0;
+  color: var(--app-muted);
+}
+
+.cognitive-test-save-error {
+  color: #ffc2c8;
+}
+
+@media (max-width: 700px) {
+  .cognitive-test-intro {
+    grid-template-columns: 1fr;
+  }
+
+  .cognitive-test-start {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cognitive-test-start button,
+  .cognitive-test-results > button {
+    width: 100%;
+  }
+
+  .cognitive-test-result-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 380px) {
+  .cognitive-test-result-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cognitive-test-stimulus {
+    transition: none;
+  }
+}
